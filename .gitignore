@@ -1,0 +1,24 @@
+# Build
+build/
+cmake-build-*/
+.claude/
+
+# macOS
+.DS_Store
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+
+# IDEs
+.vscode/
+.idea/
+
+# binaries
+*.o
+*.out
+*.app
+*.exe
+
+# ImGui config
+imgui.ini
