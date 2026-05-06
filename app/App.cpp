@@ -1,5 +1,5 @@
-// OpenGL 3.3 core profile — must be included BEFORE GLFW when GLFW_INCLUDE_NONE is set
-#include <OpenGL/gl3.h>
+// OpenGL 3.3 core profile — debe incluirse ANTES de GLFW cuando GLFW_INCLUDE_NONE está activo
+#include "core/gl.h"
 #include <GLFW/glfw3.h>
 
 #include "imgui.h"
@@ -55,6 +55,15 @@ bool App::init()
     }
 
     glfwMakeContextCurrent(m_window);
+
+#ifdef _WIN32
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+        std::fprintf(stderr, "[GLAD] No se pudo inicializar el cargador de OpenGL.\n");
+        glfwTerminate();
+        return false;
+    }
+#endif
+
     glfwSwapInterval(1); // vsync
 
     // ── ImGui ────────────────────────────────────────────────────────────────
@@ -63,6 +72,14 @@ bool App::init()
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+    // Latin-1 Supplement cubre caracteres españoles: á é í ó ú ñ ü ¡ ¿
+    static const ImWchar latinRanges[] = { 0x0020, 0x00FF, 0 };
+#ifdef _WIN32
+    io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/segoeui.ttf", 15.0f, nullptr, latinRanges);
+#elif defined(__APPLE__)
+    io.Fonts->AddFontFromFileTTF("/System/Library/Fonts/Helvetica.ttc", 15.0f, nullptr, latinRanges);
+#endif
 
     ImGui::StyleColorsDark();
 
@@ -171,25 +188,24 @@ void App::renderSidebar()
             ImGui::PopStyleColor();
     };
 
-    ImGui::TextDisabled("MODULES");
+    ImGui::TextDisabled("MÓDULOS");
     ImGui::Spacing();
-    navButton("Thresholding",   ActiveModule::Threshold);
-    navButton("Edge Detection", ActiveModule::EdgeDetection);
+    navButton("Umbralización",      ActiveModule::Threshold);
+    navButton("Detección de bordes", ActiveModule::EdgeDetection);
 
-    // ── Future modules ───────────────────────────────────────────────────────
+    // ── Módulos futuros ──────────────────────────────────────────────────────
     ImGui::Spacing();
     ImGui::Separator();
-    ImGui::TextDisabled("COMING SOON");
+    ImGui::TextDisabled("PRÓXIMAMENTE");
     ImGui::Spacing();
     ImGui::BeginDisabled();
-    ImGui::Button("Histogram",   ImVec2(-1, 32)); // TODO: histogram module
-    ImGui::Button("ML Compare",  ImVec2(-1, 32)); // TODO: ML comparison module
+    ImGui::Button("ML Comparativo",  ImVec2(-1, 32));
     ImGui::EndDisabled();
 
-    // Version footer
+    // Pie de versión
     ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 24.0f);
     ImGui::Separator();
-    ImGui::TextDisabled(" v1.0  —  clang / M1");
+    ImGui::TextDisabled(" v1.2");
 }
 
 void App::renderContent()
@@ -199,8 +215,8 @@ void App::renderContent()
     case ActiveModule::None:
         ImGui::Spacing();
         ImGui::SetCursorPosX(
-            (ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Select a module from the sidebar.").x) * 0.5f);
-        ImGui::TextDisabled("Select a module from the sidebar.");
+            (ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Selecciona un módulo del panel lateral.").x) * 0.5f);
+        ImGui::TextDisabled("Selecciona un módulo del panel lateral.");
         break;
 
     case ActiveModule::Threshold:

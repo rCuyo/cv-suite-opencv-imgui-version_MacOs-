@@ -3,7 +3,7 @@
 
 int main()
 {
-    App app("CV Suite — OpenCV 4 + ImGui", 1280, 800);
+    App app("CV Suite v1.2 — OpenCV 4 + ImGui", 1280, 800);
 
     if (!app.init()) {
         std::fprintf(stderr, "[CVSuite] Failed to initialise application.\n");

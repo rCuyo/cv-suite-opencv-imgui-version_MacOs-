@@ -11,7 +11,7 @@ enum class EdgeMode {
 class EdgeDetectionModule
 {
 public:
-    EdgeDetectionModule();
+    EdgeDetectionModule()  = default;
     ~EdgeDetectionModule();
 
     void renderUI();
@@ -23,26 +23,25 @@ private:
     void processSegmentation(const cv::Mat& gray);
     void drawImageRow();
 
-    EdgeMode m_mode        = EdgeMode::OCRDocument;
-    bool     m_needsProcess = false;
+    EdgeMode    m_mode         = EdgeMode::OCRDocument;
+    bool        m_needsProcess = false;
+    std::string m_loadedPath;
 
     cv::Mat m_original;
     cv::Mat m_gray;
-    cv::Mat m_edges;        // Canny output (single channel)
-    cv::Mat m_contourViz;   // Contours drawn on colour copy (segmentation mode)
+    cv::Mat m_edges;
+    cv::Mat m_contourViz;
 
     Texture m_texOrig;
     Texture m_texEdges;
-    Texture m_texContours; // Only valid in Segmentation mode
+    Texture m_texContours;
 
     // ── Canny parameters ──────────────────────────────────────────────────────
-    int m_gaussKernel  = 5;  // Kernel size for Gaussian pre-blur (odd, >= 3)
-    int m_cannyLow     = 50; // Hysteresis lower threshold
-    int m_cannyHigh    = 150;// Hysteresis upper threshold
-    int m_apertureSize = 3;  // Sobel aperture (3, 5, or 7)
+    int m_gaussKernel  = 5;
+    int m_cannyLow     = 50;
+    int m_cannyHigh    = 150;
+    int m_apertureSize = 3;
 
     // ── Segmentation parameters ───────────────────────────────────────────────
-    int m_minContourArea = 200; // Ignore contours smaller than this (px²)
-
-    char m_pathBuf[512];
+    int m_minContourArea = 200;
 };

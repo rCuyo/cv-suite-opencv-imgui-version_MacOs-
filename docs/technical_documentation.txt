@@ -1,0 +1,448 @@
+================================================================================
+  CVSuite — Technical Documentation
+  Version 1.0
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+  1. Project Overview
+  2. Folder Structure
+  3. Architecture
+  4. Dependencies
+  5. Build Instructions
+     5.1 Windows
+     5.2 macOS
+  6. vcpkg Usage
+  7. Release Generation
+  8. Module System
+  9. Histogram Implementation
+ 10. File Dialog System
+ 11. Export System
+ 12. Adding a New Module
+ 13. CMake Notes
+
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+CVSuite is a cross-platform desktop application for interactive image processing
+using classical computer vision algorithms. It provides a GUI for real-time
+parameter tuning with immediate visual feedback.
+
+  Stack:
+    - Language    : C++17
+    - Image ops   : OpenCV 4.x
+    - GUI         : Dear ImGui v1.91.6
+    - Windowing   : GLFW 3.4
+    - Rendering   : OpenGL 3.3 Core Profile
+    - Build system: CMake 3.21+
+    - Dependencies: vcpkg (manifest mode)
+
+  Supported platforms:
+    - Windows 10/11 x64 (MSVC 2022)
+    - macOS (Apple Silicon, via Homebrew or vcpkg)
+
+
+================================================================================
+2. FOLDER STRUCTURE
+================================================================================
+
+  cv-suite/
+  ├── CMakeLists.txt              # Cross-platform build configuration
+  ├── vcpkg.json                  # Dependency manifest (opencv4, glfw3, glad)
+  ├── bootstrap.bat               # One-click Windows build script
+  ├── main.cpp                    # Entry point — creates App, calls init/run
+  │
+  ├── app/
+  │   ├── App.h                   # App class declaration
+  │   └── App.cpp                 # GLFW window, ImGui context, main loop, sidebar
+  │
+  ├── core/
+  │   ├── gl.h                    # Cross-platform OpenGL header (glad/gl3.h)
+  │   ├── ImageLoader.h/.cpp      # cv::imread wrapper
+  │   ├── Utils.h/.cpp            # cv::Mat → OpenGL texture conversion
+  │   ├── HistogramUtils.h/.cpp   # cv::calcHist → normalized float[256]
+  │   └── FileDialog.h/.cpp       # tinyfiledialogs wrapper (open/save)
+  │
+  ├── modules/
+  │   ├── ThresholdModule.h/.cpp  # Thresholding: OCR, Medical, Industrial
+  │   └── EdgeDetectionModule.h/.cpp  # Canny edge detection + contours
+  │
+  ├── docs/
+  │   ├── report_template.txt     # LaTeX academic report template
+  │   └── technical_documentation.txt  # This file
+  │
+  └── vcpkg/                      # vcpkg tool (included in repo)
+
+
+================================================================================
+3. ARCHITECTURE
+================================================================================
+
+  Entry point
+  -----------
+  main.cpp creates an App("CV Suite", 1280, 800), calls init(), then run().
+
+  Three-layer structure
+  ---------------------
+  app/        Owns the GLFW window, ImGui context, and active module pointer.
+              Renders a fixed 210px sidebar for navigation and a scrollable
+              content area for the active module.
+
+  modules/    Each module is self-contained:
+                - owns its parameters
+                - performs its OpenCV processing
+                - renders its own ImGui controls + image output + histograms
+
+  core/       Shared utilities used across modules:
+                - ImageLoader: wraps cv::imread
+                - Utils: cv::Mat → GL_TEXTURE_2D upload (BGR→RGB, 1-byte align)
+                - HistogramUtils: computes normalized 256-bin histograms
+                - FileDialog: cross-platform file picker wrapper
+
+  Processing flow
+  ---------------
+  1. User clicks "Browse..." → native OS file dialog opens
+  2. FileDialog::openImage() returns selected path
+  3. Module calls ImageLoader::load(path) → cv::Mat (BGR)
+  4. Module converts to grayscale → applies algorithm → produces result Mat
+  5. Utils::matToTexture() uploads to GPU → returns Texture{id, w, h}
+  6. ImGui::Image() renders the texture in the content panel
+  7. HistogramUtils::compute() feeds ImGui::PlotHistogram in real time
+
+  Lazy processing
+  ---------------
+  Modules use a m_needsProcess flag. Processing is deferred to the end of
+  renderUI() so it happens at most once per frame, after all sliders have
+  been read. This prevents redundant recomputation when multiple parameters
+  change in the same frame.
+
+
+================================================================================
+4. DEPENDENCIES
+================================================================================
+
+  Dependency        Version     How it arrives
+  ─────────────────────────────────────────────────────────────────────────────
+  OpenCV 4.x        4.12.0      vcpkg (opencv4)
+  ImGui             v1.91.6     CMake FetchContent (GitHub)
+  GLFW3             3.4         vcpkg (glfw3)
+  GLAD              0.1.36      vcpkg (glad) — Windows only
+  tinyfiledialogs   latest      CMake FetchContent (GitHub mirror)
+  OpenGL 3.3        system      opengl32 (Win) / framework OpenGL (macOS)
+
+  Windows-only system libs linked for tinyfiledialogs:
+    comdlg32 (Win32 file dialogs), ole32 (COM)
+
+  macOS frameworks linked explicitly:
+    Cocoa, CoreVideo, IOKit, OpenGL
+
+
+================================================================================
+5. BUILD INSTRUCTIONS
+================================================================================
+
+  5.1 WINDOWS
+  -----------
+
+  Prerequisites:
+    - Visual Studio 2022 with workload "Desktop development with C++"
+      (includes MSVC compiler, CMake, and Windows SDK)
+    - Git
+
+  Quick build (recommended):
+    Double-click bootstrap.bat
+    The script will:
+      1. Detect CMake from Visual Studio installation
+      2. Bootstrap vcpkg if needed
+      3. Run cmake -B build with the vcpkg toolchain
+      4. Run cmake --build build --config Release
+
+  Manual build:
+    cmake -B build -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
+    cmake --build build --config Release
+
+  Output:
+    build\bin\Release\CVSuite.exe
+    (All required DLLs are automatically copied next to the executable
+     via a CMake POST_BUILD command using TARGET_RUNTIME_DLLS)
+
+  Running without build:
+    Download CVSuite-windows.zip from GitHub Releases, extract, run CVSuite.exe.
+
+  5.2 macOS
+  ---------
+
+  Prerequisites:
+    - Xcode Command Line Tools: xcode-select --install
+    - Homebrew: brew install opencv glfw cmake
+
+  Build:
+    cmake -B build
+    cmake --build build
+    ./build/bin/CVSuite
+
+  With vcpkg (optional, for reproducible builds):
+    cmake -B build -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
+    cmake --build build
+
+
+================================================================================
+6. VCPKG USAGE
+================================================================================
+
+  The vcpkg directory is included in the repository (self-contained).
+  The vcpkg.json manifest file declares all dependencies:
+
+    {
+      "name": "cvsuite",
+      "version": "1.0.0",
+      "dependencies": [ "opencv4", "glfw3", "glad" ]
+    }
+
+  When CMake is invoked with -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake,
+  CMake automatically runs "vcpkg install" to resolve and install all declared
+  packages before configuring. The first run may take several minutes as packages
+  are downloaded and compiled.
+
+  To add a new dependency:
+    1. Add the package name to vcpkg.json under "dependencies"
+    2. Run cmake configure again — vcpkg will install it automatically
+    3. Add find_package() and target_link_libraries() in CMakeLists.txt
+
+  To install a package manually:
+    vcpkg/vcpkg.exe install <package-name>:x64-windows
+
+  Binary cache:
+    vcpkg caches compiled packages in %LOCALAPPDATA%\vcpkg\archives.
+    Subsequent builds reuse the cache and are much faster.
+
+
+================================================================================
+7. RELEASE GENERATION
+================================================================================
+
+  After building in Release mode, the output directory
+  build\bin\Release\ is self-contained (exe + all DLLs).
+
+  To create a distributable zip:
+    PowerShell:
+      Compress-Archive -Path "build\bin\Release\*" `
+                       -DestinationPath "CVSuite-windows.zip" -Force
+
+  To publish as a GitHub Release:
+    1. Tag the commit: git tag v1.x.x && git push origin v1.x.x
+    2. Go to GitHub → Releases → Draft new release
+    3. Attach CVSuite-windows.zip
+    4. Publish
+
+  macOS release:
+    The macOS binary dynamically links to Homebrew OpenCV and GLFW.
+    To distribute, use macOS "app bundling" or require the user to have
+    Homebrew installed. An .app bundle is out of scope for the current version.
+
+
+================================================================================
+8. MODULE SYSTEM
+================================================================================
+
+  Each module follows this interface:
+
+    class FooModule {
+    public:
+        void renderUI();                          // Called every frame
+        void loadAndProcess(const std::string&);  // Load + trigger processing
+    private:
+        void reprocess();                         // Re-run algorithm on m_gray
+        // ... state, textures, parameters
+    };
+
+  Modules are owned by App as unique_ptr:
+    std::unique_ptr<ThresholdModule>     m_thresholdModule;
+    std::unique_ptr<EdgeDetectionModule> m_edgeModule;
+
+  Dispatch happens via ActiveModule enum in App::renderContent().
+
+  ThresholdModule (modules/ThresholdModule.h/.cpp)
+  ─────────────────────────────────────────────────
+  Modes:
+    OCR               → Otsu + Adaptive (two result textures)
+    MedicalSegmentation → Band threshold + red overlay
+    IndustrialInspection → GaussianBlur + inverse threshold + MORPH_OPEN
+
+  Histograms: m_histOrig, m_histA, m_histB (updated in reprocess())
+
+  EdgeDetectionModule (modules/EdgeDetectionModule.h/.cpp)
+  ─────────────────────────────────────────────────────────
+  Modes:
+    OCRDocument  → Canny edges only
+    Segmentation → Canny + findContours with per-contour color + area labels
+
+
+================================================================================
+9. HISTOGRAM IMPLEMENTATION
+================================================================================
+
+  Files: core/HistogramUtils.h, core/HistogramUtils.cpp
+
+  Interface:
+    std::array<float, 256> HistogramUtils::compute(const cv::Mat& img);
+
+  Algorithm:
+    1. If img is multi-channel, convert to grayscale via cv::cvtColor(BGR2GRAY).
+    2. Call cv::calcHist with histSize=256, range=[0,256).
+    3. Find the maximum bin value with cv::minMaxLoc.
+    4. Divide each bin by maxVal to normalize to [0, 1].
+    5. Return as std::array<float, 256>.
+
+  Integration in ThresholdModule:
+    - m_histOrig is computed in loadAndProcess() immediately after cv::cvtColor.
+    - m_histA and m_histB are computed at the end of reprocess(), after the
+      result Mats are ready. Multi-channel result Mats (Medical, Industrial)
+      are handled transparently by HistogramUtils::compute()'s auto-conversion.
+
+  Rendering:
+    - drawHistograms() is called at the end of renderUI(), after drawImageRow().
+    - Uses ImGui::BeginGroup() / EndGroup() to place label + histogram vertically.
+    - Uses ImGui::PushID() / PopID() to give each PlotHistogram a unique ID.
+    - Column widths match the image panel widths for visual alignment.
+
+
+================================================================================
+10. FILE DIALOG SYSTEM
+================================================================================
+
+  Files: core/FileDialog.h, core/FileDialog.cpp
+  Dependency: tinyfiledialogs (fetched via CMake FetchContent)
+
+  Interface:
+    std::string FileDialog::openImage(const std::string& defaultPath = "");
+    std::string FileDialog::saveImage(const std::string& defaultPath = "result.png");
+
+  Both functions:
+    - Call tinyfd_openFileDialog / tinyfd_saveFileDialog
+    - Return the selected path as std::string
+    - Return empty string if the user cancels
+
+  File filters:
+    Open: *.png, *.jpg, *.jpeg, *.bmp
+    Save: *.png, *.jpg
+
+  Platform behavior:
+    Windows : Win32 IFileOpenDialog / GetSaveFileName (via comdlg32 + ole32)
+    macOS   : osascript (AppleScript) invokes NSOpenPanel / NSSavePanel
+    Linux   : zenity or kdialog (if available), falls back to console input
+
+  tinyfiledialogs is a single .c file + .h file compiled directly into the
+  executable. No shared library or separate installation is required.
+
+  CMake integration:
+    FetchContent_Declare downloads it; the .c file is added to APP_SOURCES.
+    The source directory is added to target_include_directories.
+    Windows links comdlg32 and ole32 additionally.
+
+
+================================================================================
+11. EXPORT SYSTEM
+================================================================================
+
+  An "Export Result" button appears below the image panels when a processed
+  result is available (m_texA.valid()).
+
+  ThresholdModule export:
+    - Exports m_resultA (primary result: Otsu / segmented region / defect map)
+    - Uses FileDialog::saveImage() to get the destination path
+    - Calls cv::imwrite(path, m_resultA)
+
+  EdgeDetectionModule export:
+    - Exports m_contourViz if in Segmentation mode (color contour image)
+    - Exports m_edges if in OCR mode (Canny edge map, single channel)
+    - Decision: cv::Mat toExport = m_texContours.valid() ? m_contourViz : m_edges;
+
+  cv::imwrite infers the output format from the file extension:
+    .png → lossless PNG
+    .jpg → JPEG (default quality 95)
+
+  If a file with the given path already exists, it is silently overwritten.
+  No confirmation dialog is shown (consistent with most image editing tools).
+
+
+================================================================================
+12. ADDING A NEW MODULE
+================================================================================
+
+  Step 1 — Create module files
+    modules/FooModule.h    (declare class FooModule)
+    modules/FooModule.cpp  (implement renderUI, loadAndProcess, reprocess)
+
+  Step 2 — Declare the enum value
+    In app/App.h, add: Foo to ActiveModule enum.
+
+  Step 3 — Add to sidebar navigation
+    In app/App.cpp → renderSidebar():
+      navButton("Foo", ActiveModule::Foo);
+
+  Step 4 — Add dispatch in renderContent
+    In app/App.cpp → renderContent():
+      case ActiveModule::Foo:
+          m_fooModule->renderUI();
+          break;
+
+  Step 5 — Instantiate in App::init()
+    m_fooModule = std::make_unique<FooModule>();
+
+  Step 6 — Register the source file
+    In CMakeLists.txt, add modules/FooModule.cpp to APP_SOURCES.
+
+  Module coding conventions:
+    - PushID / PopID with a unique string at the top of renderUI()
+    - Use std::string m_loadedPath (not a char buffer) for path display
+    - Use FileDialog::openImage() for file picking
+    - Use Utils::updateTexture / deleteTexture for GPU resource management
+    - Set m_needsProcess = true whenever parameters change
+    - Run reprocess() lazily at the end of the renderUI switch block
+
+
+================================================================================
+13. CMAKE NOTES
+================================================================================
+
+  Minimum version: 3.21 (required for $<TARGET_RUNTIME_DLLS:...> generator)
+
+  Languages: CXX C (C is required for tinyfiledialogs.c)
+
+  Key CMake variables:
+    CMAKE_TOOLCHAIN_FILE  Set to vcpkg/scripts/buildsystems/vcpkg.cmake
+                          when building with vcpkg dependency management.
+
+  Conditional compilation:
+    if(WIN32)     : GLAD loader, opengl32, comdlg32, ole32
+    if(APPLE)     : macOS frameworks, Homebrew RPATH
+    Generator expressions are used for per-platform link libraries:
+      $<$<PLATFORM_ID:Windows>:glad::glad>
+      $<$<PLATFORM_ID:Darwin>:-framework OpenGL>
+
+  Post-build DLL copy (Windows only):
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_RUNTIME_DLLS:${PROJECT_NAME}>
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        COMMAND_EXPAND_LISTS
+    )
+    This automatically copies all runtime DLLs from vcpkg's bin/ directory
+    next to CVSuite.exe after each build, making the output directory
+    self-contained and portable.
+
+  FetchContent dependencies (auto-downloaded at configure time):
+    imgui          v1.91.6  — Dear ImGui GUI library
+    tinyfiledialogs latest  — native OS file dialogs
+
+  vcpkg dependencies (installed on first cmake configure):
+    opencv4    4.12.0  — image processing
+    glfw3      3.4     — windowing and input
+    glad       0.1.36  — OpenGL function loader (Windows only)
+
+================================================================================
+  End of Technical Documentation
+================================================================================

@@ -1,21 +1,24 @@
-cmake_minimum_required(VERSION 3.20)
-project(CVSuite VERSION 1.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.21)   # 3.21+ para TARGET_RUNTIME_DLLS
+project(CVSuite VERSION 1.0 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-set(OpenCV_DIR /opt/homebrew/opt/opencv/lib/cmake/opencv4)
+# macOS sin vcpkg: apunta a Homebrew para que find_package encuentre OpenCV y GLFW
+if(APPLE AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    list(PREPEND CMAKE_PREFIX_PATH /opt/homebrew)
+endif()
 
 find_package(OpenCV REQUIRED)
+find_package(glfw3 CONFIG REQUIRED)
 
-# ─── System dependencies ──────────────────────────────────────────────────────
+if(WIN32)
+    find_package(glad CONFIG REQUIRED)
+endif()
 
-find_package(PkgConfig REQUIRED)
-find_package(glfw3 REQUIRED)
-
-# ─── ImGui — manual source integration via FetchContent ──────────────────────
-# Check latest tag at: https://github.com/ocornut/imgui/releases
+# ─── ImGui — integración de fuentes via FetchContent ─────────────────────────
+# Revisa el último tag en: https://github.com/ocornut/imgui/releases
 
 include(FetchContent)
 FetchContent_Declare(
@@ -34,20 +37,39 @@ set(IMGUI_SOURCES
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
-# ─── Application sources ──────────────────────────────────────────────────────
+# ─── tinyfiledialogs — diálogos de archivo nativos (cross-platform) ──────────
+
+FetchContent_Declare(
+    tinyfiledialogs
+    GIT_REPOSITORY https://github.com/native-toolkit/libtinyfiledialogs.git
+    GIT_SHALLOW    TRUE
+    SOURCE_DIR     ${CMAKE_BINARY_DIR}/_deps/tinyfiledialogs-src
+)
+FetchContent_GetProperties(tinyfiledialogs)
+if(NOT tinyfiledialogs_POPULATED)
+    if(POLICY CMP0169)
+        cmake_policy(SET CMP0169 OLD)
+    endif()
+    FetchContent_Populate(tinyfiledialogs)
+endif()
+
+# ─── Fuentes de la aplicación ─────────────────────────────────────────────────
 
 set(APP_SOURCES
     main.cpp
     app/App.cpp
     core/ImageLoader.cpp
     core/Utils.cpp
+    core/HistogramUtils.cpp
+    core/FileDialog.cpp
     modules/ThresholdModule.cpp
     modules/EdgeDetectionModule.cpp
+    ${tinyfiledialogs_SOURCE_DIR}/tinyfiledialogs.c
 )
 
 add_executable(${PROJECT_NAME} ${APP_SOURCES} ${IMGUI_SOURCES})
 
-# ─── macOS RPATH fix (Homebrew) ──────────────────────────────────────────────
+# ─── macOS: RPATH para encontrar las dylibs de Homebrew en runtime ────────────
 if(APPLE)
     set_target_properties(${PROJECT_NAME} PROPERTIES
         BUILD_RPATH "/opt/homebrew/opt/opencv/lib"
@@ -57,43 +79,58 @@ if(APPLE)
     )
 endif()
 
-# ─── Include paths ────────────────────────────────────────────────────────────
+# ─── Rutas de includes ────────────────────────────────────────────────────────
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-    ${CMAKE_SOURCE_DIR}           # For #include "app/...", "core/...", etc.
+    ${CMAKE_SOURCE_DIR}                    # Para #include "app/...", "core/...", etc.
     ${OpenCV_INCLUDE_DIRS}
-    ${GLFW_INCLUDE_DIRS}
-    ${imgui_SOURCE_DIR}           # For #include "imgui.h"
-    ${imgui_SOURCE_DIR}/backends  # For #include "backends/imgui_impl_*.h"
+    ${imgui_SOURCE_DIR}                    # Para #include "imgui.h"
+    ${imgui_SOURCE_DIR}/backends           # Para #include "backends/imgui_impl_*.h"
+    ${tinyfiledialogs_SOURCE_DIR}          # Para #include "tinyfiledialogs.h"
 )
 
-# ─── Compile definitions ──────────────────────────────────────────────────────
+# ─── Definiciones de compilación ──────────────────────────────────────────────
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    GL_SILENCE_DEPRECATION   # Suppress macOS OpenGL deprecation warnings
-    GLFW_INCLUDE_NONE        # Prevent GLFW from pulling in <OpenGL/gl.h>;
-                             # we manually include <OpenGL/gl3.h> for core profile
+    GLFW_INCLUDE_NONE
+    $<$<PLATFORM_ID:Darwin>:GL_SILENCE_DEPRECATION>
 )
 
-# ─── Link libraries ───────────────────────────────────────────────────────────
+# UTF-8 en MSVC: necesario para caracteres españoles acentuados en literales de cadena
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /utf-8)
+endif()
+
+# ─── Enlace de librerías ──────────────────────────────────────────────────────
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${OpenCV_LIBS}
     glfw
-
-    "-framework OpenGL"
-    "-framework Cocoa"
-    "-framework IOKit"
-    "-framework CoreVideo"
+    $<$<PLATFORM_ID:Windows>:glad::glad>
+    $<$<PLATFORM_ID:Windows>:opengl32>
+    $<$<PLATFORM_ID:Windows>:comdlg32>
+    $<$<PLATFORM_ID:Windows>:ole32>
+    $<$<PLATFORM_ID:Darwin>:-framework OpenGL>
+    $<$<PLATFORM_ID:Darwin>:-framework Cocoa>
+    $<$<PLATFORM_ID:Darwin>:-framework IOKit>
+    $<$<PLATFORM_ID:Darwin>:-framework CoreVideo>
 )
 
-target_link_directories(${PROJECT_NAME} PRIVATE ${GLFW_LIBRARY_DIRS})
-
-# ─── Build output ─────────────────────────────────────────────────────────────
+# ─── Directorio de salida ─────────────────────────────────────────────────────
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
+
+# ─── Windows: copiar DLLs al lado del ejecutable después del build ────────────
+if(WIN32)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_RUNTIME_DLLS:${PROJECT_NAME}>
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        COMMAND_EXPAND_LISTS
+    )
+endif()
 
 message(STATUS "OpenCV version : ${OpenCV_VERSION}")
 message(STATUS "GLFW   version : ${GLFW_VERSION}")

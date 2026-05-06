@@ -1,0 +1,554 @@
+% ============================================================
+%  CVSuite — Academic Report Template
+%  Copy this content into a .tex file and compile with pdflatex
+% ============================================================
+
+\documentclass[12pt, a4paper]{article}
+
+% ── Packages ──────────────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{fancyhdr}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{cite}
+
+\geometry{
+    top    = 2.5cm,
+    bottom = 2.5cm,
+    left   = 3.0cm,
+    right  = 2.5cm
+}
+
+\onehalfspacing
+
+% ── Code listing style ────────────────────────────────────────────────────────
+\lstset{
+    basicstyle    = \ttfamily\small,
+    keywordstyle  = \color{blue}\bfseries,
+    commentstyle  = \color{gray}\itshape,
+    stringstyle   = \color{teal},
+    numbers       = left,
+    numberstyle   = \tiny\color{gray},
+    frame         = single,
+    breaklines    = true,
+    captionpos    = b
+}
+
+% ── Header / Footer ───────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{CVSuite — Computer Vision Tool}
+\lhead{\leftmark}
+\cfoot{\thepage}
+
+\hypersetup{
+    colorlinks = true,
+    linkcolor  = blue,
+    citecolor  = blue,
+    urlcolor   = blue
+}
+
+% ==============================================================================
+\begin{document}
+% ==============================================================================
+
+% ── Cover Page ────────────────────────────────────────────────────────────────
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+
+    {\Huge \textbf{CVSuite}}\\[0.5cm]
+    {\Large A Desktop Computer Vision Application}\\[0.3cm]
+    {\large OpenCV + ImGui + OpenGL 3.3}
+
+    \vspace{1.5cm}
+    \rule{\linewidth}{0.5pt}\\[0.4cm]
+
+    {\LARGE \textbf{Technical Report}}\\[0.4cm]
+    {\large Image Processing with Classical Computer Vision Algorithms}
+
+    \rule{\linewidth}{0.5pt}
+
+    \vspace{2cm}
+
+    \begin{tabular}{ll}
+        \textbf{Author:}      & [Author Name]              \\[0.3cm]
+        \textbf{Institution:} & [University / Organization]\\[0.3cm]
+        \textbf{Course:}      & [Course Name and Code]     \\[0.3cm]
+        \textbf{Professor:}   & [Professor Name]           \\[0.3cm]
+        \textbf{Date:}        & \today                     \\
+    \end{tabular}
+
+    \vfill
+
+    % Optional: institutional logo
+    % \includegraphics[width=0.3\textwidth]{logo.png}
+
+\end{titlepage}
+
+% ── Table of Contents ─────────────────────────────────────────────────────────
+\tableofcontents
+\newpage
+
+% ==============================================================================
+\section{Introduction}
+% ==============================================================================
+
+CVSuite is a cross-platform desktop application that provides an interactive
+graphical interface for applying classical computer vision algorithms to images.
+The application is built on C++17, using OpenCV~4 for image processing,
+Dear~ImGui for the user interface, and OpenGL~3.3 for hardware-accelerated
+rendering.
+
+The primary goal of this project is to bridge the gap between theoretical
+computer vision concepts and practical application by offering immediate visual
+feedback for parameter changes. Users can load any image, adjust algorithm
+parameters in real time, and observe the effect on the processed result alongside
+the intensity histogram.
+
+This report documents the theoretical background of the algorithms implemented,
+the system architecture, the implementation choices made, and a discussion
+of the experimental results.
+
+% ==============================================================================
+\section{Objectives}
+% ==============================================================================
+
+\begin{itemize}[leftmargin=2cm]
+    \item Implement a modular, production-quality computer vision tool in C++17.
+    \item Integrate thresholding algorithms suitable for OCR, medical imaging,
+          and industrial inspection workflows.
+    \item Implement Canny edge detection with full parameter control.
+    \item Provide real-time histogram visualization to aid threshold selection.
+    \item Deliver a cross-platform application (Windows and macOS) using a
+          unified CMake build system and vcpkg for dependency management.
+    \item Compare classical threshold-based approaches with machine learning
+          methods in terms of determinism, speed, and interpretability.
+\end{itemize}
+
+% ==============================================================================
+\section{Theoretical Framework}
+% ==============================================================================
+
+% ── 3.1 Thresholding ──────────────────────────────────────────────────────────
+\subsection{Thresholding}
+
+Thresholding is a fundamental image segmentation technique that converts a
+grayscale image $I(x,y)$ into a binary image $B(x,y)$ according to a threshold
+value $T$:
+
+\begin{equation}
+    B(x,y) =
+    \begin{cases}
+        255 & \text{if } I(x,y) \geq T \\
+        0   & \text{otherwise}
+    \end{cases}
+\end{equation}
+
+The central challenge lies in selecting an appropriate value of $T$ that
+separates the foreground from the background given the specific characteristics
+of each image.
+
+% ── 3.2 Otsu's Method ────────────────────────────────────────────────────────
+\subsection{Otsu's Global Thresholding}
+
+Otsu's method~\cite{otsu1979} automatically determines the optimal global
+threshold by maximising the inter-class variance between two pixel classes
+(foreground and background). Given a normalized histogram with $L$ gray levels,
+the probability of a pixel belonging to class $C_i$ is:
+
+\begin{equation}
+    \omega_i(T) = \sum_{k \in C_i} p_k
+\end{equation}
+
+The inter-class variance is defined as:
+
+\begin{equation}
+    \sigma_B^2(T) = \omega_0(T)\,\omega_1(T)
+                   \left[\mu_0(T) - \mu_1(T)\right]^2
+\end{equation}
+
+where $\mu_i(T)$ is the mean intensity of class $C_i$. The optimal threshold
+$T^*$ satisfies:
+
+\begin{equation}
+    T^* = \underset{T}{\arg\max}\; \sigma_B^2(T)
+\end{equation}
+
+Otsu's method performs optimally when the histogram is bimodal (two clearly
+separated peaks). It is the preferred choice for document binarization in
+OCR pipelines.
+
+% ── 3.3 Adaptive Thresholding ─────────────────────────────────────────────────
+\subsection{Adaptive Thresholding}
+
+When illumination is spatially uneven — for example, a photographed page with
+shadows — a single global threshold fails. Adaptive thresholding computes a
+local threshold $T(x,y)$ for each pixel based on a neighbourhood $\mathcal{N}$:
+
+\begin{equation}
+    T(x,y) = \mu_{\mathcal{N}}(x,y) - C
+\end{equation}
+
+where $\mu_{\mathcal{N}}$ is the Gaussian-weighted mean of the neighbourhood
+window of size $s \times s$, and $C$ is a constant that fine-tunes the
+sensitivity. This formulation makes the method robust to gradual changes
+in illumination across the image.
+
+% ── 3.4 Histograms ────────────────────────────────────────────────────────────
+\subsection{Intensity Histograms}
+
+The intensity histogram $h(i)$ of a grayscale image counts the frequency of
+each intensity level $i \in [0, 255]$:
+
+\begin{equation}
+    h(i) = \#\{(x,y) \mid I(x,y) = i\}
+\end{equation}
+
+Normalized to $[0,1]$, the histogram approximates the probability density
+function of pixel intensities. Histograms serve as a diagnostic tool for
+threshold selection: if the histogram is bimodal, Otsu's method will produce
+a near-optimal result; if it is unimodal or multimodal, adaptive or multi-level
+thresholding is preferred.
+
+In CVSuite, histograms are computed using \texttt{cv::calcHist} with 256 bins
+and displayed in real time using \texttt{ImGui::PlotHistogram}, updating
+automatically whenever the threshold parameters are modified.
+
+% ── 3.5 Canny Edge Detection ─────────────────────────────────────────────────
+\subsection{Canny Edge Detection}
+
+The Canny algorithm~\cite{canny1986} is a multi-stage edge detector designed
+to find the optimal response to step edges under a Gaussian noise model.
+
+\subsubsection*{Stage 1 — Gaussian Smoothing}
+
+The image is convolved with a Gaussian kernel $G_\sigma$ to suppress
+high-frequency noise before gradient computation:
+\begin{equation}
+    I_s = G_\sigma * I
+\end{equation}
+
+\subsubsection*{Stage 2 — Gradient Computation}
+
+Sobel operators estimate the spatial derivatives:
+\begin{equation}
+    G_x = \frac{\partial I_s}{\partial x}, \quad
+    G_y = \frac{\partial I_s}{\partial y}
+\end{equation}
+\begin{equation}
+    G = \sqrt{G_x^2 + G_y^2}, \quad
+    \theta = \arctan\!\left(\frac{G_y}{G_x}\right)
+\end{equation}
+
+\subsubsection*{Stage 3 — Non-Maximum Suppression}
+
+Each pixel retains its gradient magnitude only if it is a local maximum along
+the gradient direction $\theta$, producing a thinned, 1-pixel-wide edge map.
+
+\subsubsection*{Stage 4 — Hysteresis Thresholding}
+
+Two thresholds $T_{\text{low}}$ and $T_{\text{high}}$ classify pixels:
+\begin{itemize}
+    \item $G > T_{\text{high}}$: definite edge.
+    \item $T_{\text{low}} < G \leq T_{\text{high}}$: weak edge, retained only
+          if 8-connected to a definite edge.
+    \item $G \leq T_{\text{low}}$: discarded.
+\end{itemize}
+
+\subsubsection*{Contour Extraction}
+
+After Canny, \texttt{cv::findContours} extracts closed edge chains as ordered
+point sequences. Each contour is filtered by minimum area and drawn with a
+unique color to distinguish overlapping objects.
+
+% ── 3.6 Comparison with Machine Learning ─────────────────────────────────────
+\subsection{Comparison with Machine Learning Approaches}
+
+Modern semantic segmentation models (U-Net, SegFormer, SAM) achieve high
+accuracy on complex, multi-class segmentation tasks. However, classical
+threshold-based methods retain significant advantages in specific domains:
+
+\begin{table}[H]
+\centering
+\caption{Classical thresholding vs. machine learning segmentation}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Property}        & \textbf{Thresholding}  & \textbf{Deep Learning}   \\
+\midrule
+Determinism              & \checkmark\ Guaranteed & \texttimes\ Stochastic   \\
+Training data required   & None                   & Thousands of samples     \\
+Inference speed          & $O(N)$, real-time      & Slower (GPU recommended) \\
+Explainability           & Full                   & Black-box                \\
+Controlled illumination  & Excellent              & Good                     \\
+Complex scenes           & Limited                & Excellent                \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+In industrial inspection and document binarization, classical thresholding
+remains the preferred choice due to its determinism, audibility, and absence
+of a training data requirement.
+
+% ==============================================================================
+\section{System Architecture}
+% ==============================================================================
+
+CVSuite follows a three-layer modular architecture:
+
+\begin{description}
+    \item[\texttt{app/}] Application layer. The \texttt{App} class owns the
+        GLFW window and ImGui context. It manages the main loop, sidebar
+        navigation, and dispatches rendering to the active module.
+
+    \item[\texttt{modules/}] Processing modules. Each module is self-contained:
+        it owns its parameters, performs its own OpenCV processing, and renders
+        its own ImGui controls and image output. Current modules:
+        \texttt{ThresholdModule} and \texttt{EdgeDetectionModule}.
+
+    \item[\texttt{core/}] Utilities. \texttt{ImageLoader} wraps
+        \texttt{cv::imread}; \texttt{Utils} converts \texttt{cv::Mat} to an
+        OpenGL texture; \texttt{HistogramUtils} computes normalized histograms;
+        \texttt{FileDialog} provides a cross-platform file picker.
+\end{description}
+
+The data flow is:
+\begin{enumerate}
+    \item User selects an image via the native file picker dialog.
+    \item \texttt{ImageLoader::load()} reads the image using \texttt{cv::imread}.
+    \item The module converts to grayscale and applies its algorithm.
+    \item \texttt{Utils::matToTexture()} uploads the result to GPU memory.
+    \item \texttt{ImGui::Image()} renders the texture in the content area.
+    \item \texttt{HistogramUtils::compute()} feeds real-time data to
+          \texttt{ImGui::PlotHistogram}.
+\end{enumerate}
+
+% ── Screenshot placeholder ────────────────────────────────────────────────────
+\begin{figure}[H]
+    \centering
+    % \includegraphics[width=0.9\textwidth]{screenshots/architecture.png}
+    \fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}
+        [SCREENSHOT: Application architecture diagram]\vspace{2cm}}}
+    \caption{CVSuite three-layer architecture diagram}
+    \label{fig:architecture}
+\end{figure}
+
+% ==============================================================================
+\section{Implementation Details}
+% ==============================================================================
+
+\subsection{Thresholding Module}
+
+The \texttt{ThresholdModule} supports three use-case modes selectable from
+the UI:
+
+\begin{itemize}
+    \item \textbf{OCR mode}: applies both Otsu global thresholding and
+          Gaussian adaptive thresholding simultaneously. Both results are
+          displayed side by side for direct comparison.
+
+    \item \textbf{Medical Segmentation}: implements two-level band thresholding.
+          Pixels with intensity $I \in [T_{\text{low}}, T_{\text{high}}]$ are
+          highlighted in red on a grayscale copy of the original, isolating a
+          specific tissue intensity range.
+
+    \item \textbf{Industrial Inspection}: applies Gaussian pre-blur followed by
+          inverse binary thresholding to detect dark defects. A morphological
+          opening operation (\texttt{MORPH\_OPEN}) removes single-pixel noise,
+          and bounding boxes are drawn around connected defect components.
+\end{itemize}
+
+Below each result panel, normalized histograms of the original and processed
+images are displayed, updating in real time with every parameter change.
+
+% ── Screenshot placeholder ────────────────────────────────────────────────────
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \fbox{\parbox{\textwidth}{\centering\vspace{2cm}
+            [SCREENSHOT: OCR mode]\vspace{2cm}}}
+        \caption{OCR mode — Otsu vs Adaptive}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \fbox{\parbox{\textwidth}{\centering\vspace{2cm}
+            [SCREENSHOT: OCR mode histograms]\vspace{2cm}}}
+        \caption{Real-time histograms}
+    \end{subfigure}
+    \caption{Thresholding module — OCR mode}
+    \label{fig:ocr_mode}
+\end{figure}
+
+\subsection{Edge Detection Module}
+
+The \texttt{EdgeDetectionModule} exposes full control over the Canny pipeline:
+Gaussian kernel size, Sobel aperture (3, 5, or 7), and both hysteresis
+thresholds. In Segmentation mode, \texttt{cv::findContours} extracts contours
+from the Canny output, filters them by minimum area, and draws each with a
+unique procedurally-generated color.
+
+\subsection{File Dialog and Export}
+
+Cross-platform file dialogs are implemented using the tinyfiledialogs library,
+which invokes the native OS dialog (Win32 \texttt{IFileOpenDialog} on Windows,
+AppleScript \texttt{NSOpenPanel} on macOS). The \texttt{FileDialog} wrapper
+exposes two functions: \texttt{openImage()} and \texttt{saveImage()}.
+
+Export uses \texttt{cv::imwrite}, which infers the output format from the file
+extension (PNG or JPG).
+
+\subsection{Histogram Visualization}
+
+\texttt{HistogramUtils::compute()} uses \texttt{cv::calcHist} with 256 bins
+over the range $[0, 256)$ on the grayscale version of any input Mat. The result
+is normalized to $[0, 1]$ by dividing by the maximum bin count, then passed
+directly to \texttt{ImGui::PlotHistogram} as a \texttt{float[256]} array.
+
+% ==============================================================================
+\section{Results}
+% ==============================================================================
+
+\subsection{OCR Thresholding}
+
+% ── Screenshot placeholder ────────────────────────────────────────────────────
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+        [SCREENSHOT: OCR results — original, Otsu, Adaptive]\vspace{3cm}}}
+    \caption{OCR mode applied to a document image}
+    \label{fig:result_ocr}
+\end{figure}
+
+[Describe results: which mode produced cleaner binarization, what block size
+and C constant values worked best, how the histograms reflected the changes.]
+
+\subsection{Medical Segmentation}
+
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+        [SCREENSHOT: Medical mode — original and segmented region]\vspace{3cm}}}
+    \caption{Medical segmentation applied to a grayscale scan}
+    \label{fig:result_medical}
+\end{figure}
+
+[Describe results: intensity band selected, tissue isolation quality,
+histogram-guided threshold choice.]
+
+\subsection{Industrial Inspection}
+
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+        [SCREENSHOT: Industrial mode — defect map with bounding boxes]\vspace{3cm}}}
+    \caption{Industrial inspection — defect detection on a surface image}
+    \label{fig:result_industrial}
+\end{figure}
+
+[Describe results: defects detected, false positive rate, influence of
+pre-blur kernel size.]
+
+\subsection{Edge Detection}
+
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+        [SCREENSHOT: Canny edges and contour visualization]\vspace{3cm}}}
+    \caption{Canny edge detection and contour extraction}
+    \label{fig:result_canny}
+\end{figure}
+
+[Describe results: edge map quality at different threshold pairs, contour
+count and area distribution, comparison with OCR thresholding output.]
+
+% ==============================================================================
+\section{Discussion}
+% ==============================================================================
+
+[Discuss: which algorithm worked best for each use case, trade-offs observed
+between parameter choices, how histograms assisted in selecting thresholds,
+limitations encountered (e.g., multi-class scenes where thresholding failed),
+and how ML methods would address those limitations.]
+
+Key observations:
+\begin{itemize}
+    \item Otsu's method is highly effective on bimodal histograms (high
+          contrast documents) but degrades on images with uniform backgrounds.
+    \item Adaptive thresholding handles illumination gradients but introduces
+          artifacts at large block sizes.
+    \item Gaussian pre-blur in Canny controls the scale of detected edges;
+          tuning it is essential for noisy images.
+    \item Real-time histograms significantly reduce trial-and-error when
+          selecting threshold values.
+\end{itemize}
+
+% ==============================================================================
+\section{Conclusions}
+% ==============================================================================
+
+CVSuite demonstrates that classical computer vision algorithms remain highly
+effective and practically relevant for targeted, controlled-environment tasks.
+The modular architecture allows new modules to be added without modifying
+existing code, and the real-time parameter feedback loop accelerates the
+development of domain-specific threshold configurations.
+
+Future work includes:
+\begin{itemize}
+    \item Integration of an ML comparison module (lightweight ONNX model).
+    \item Support for video input and batch processing.
+    \item Addition of morphological operations as a standalone module.
+\end{itemize}
+
+% ==============================================================================
+\section*{References}
+\addcontentsline{toc}{section}{References}
+% ==============================================================================
+
+\begin{thebibliography}{9}
+
+\bibitem{otsu1979}
+N. Otsu,
+``A Threshold Selection Method from Gray-Level Histograms,''
+\textit{IEEE Transactions on Systems, Man, and Cybernetics},
+vol. 9, no. 1, pp. 62--66, Jan. 1979.
+
+\bibitem{canny1986}
+J. Canny,
+``A Computational Approach to Edge Detection,''
+\textit{IEEE Transactions on Pattern Analysis and Machine Intelligence},
+vol. 8, no. 6, pp. 679--698, Nov. 1986.
+
+\bibitem{bradski2000}
+G. Bradski and A. Kaehler,
+\textit{Learning OpenCV: Computer Vision with the OpenCV Library}.
+O'Reilly Media, 2008.
+
+\bibitem{gonzalez2018}
+R. C. Gonzalez and R. E. Woods,
+\textit{Digital Image Processing}, 4th ed.
+Pearson, 2018.
+
+\bibitem{szeliski2022}
+R. Szeliski,
+\textit{Computer Vision: Algorithms and Applications}, 2nd ed.
+Springer, 2022. Available: \url{https://szeliski.org/Book/}
+
+\end{thebibliography}
+
+% ==============================================================================
+\end{document}
+% ==============================================================================

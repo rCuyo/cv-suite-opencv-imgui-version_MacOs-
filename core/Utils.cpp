@@ -1,5 +1,5 @@
-// OpenGL 3.3 core — include before anything that pulls in <OpenGL/gl.h>
-#include <OpenGL/gl3.h>
+// OpenGL 3.3 — plataforma cruzada (glad en Windows, gl3.h en macOS)
+#include "gl.h"
 
 #include "Utils.h"
 #include <opencv2/imgproc.hpp>

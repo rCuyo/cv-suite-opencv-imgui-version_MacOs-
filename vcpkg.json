@@ -1,0 +1,9 @@
+{
+  "name": "cvsuite",
+  "version": "1.0.0",
+  "dependencies": [
+    "opencv4",
+    "glfw3",
+    "glad"
+  ]
+}
