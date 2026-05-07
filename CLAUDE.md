@@ -10,7 +10,7 @@ cmake --build build
 ./build/bin/CVSuite
 ```
 
-Requires macOS with Homebrew OpenCV at `/opt/homebrew/opt/opencv`. The CMakeLists.txt hardcodes this path (line 8). No automated test suite exists — validation is done by running the GUI application.
+Requires macOS with Homebrew at `/opt/homebrew` (OpenCV and GLFW resolved via `CMAKE_PREFIX_PATH`). ImGui and tinyfiledialogs are fetched automatically by CMake on first build. No automated test suite — validation is done by running the GUI application.
 
 ## Architecture
 
@@ -20,12 +20,18 @@ CVSuite is a desktop image processing tool built with OpenCV + ImGui + OpenGL 3.
 
 **Three-layer structure**:
 - `app/` — `App` class owns the GLFW window, ImGui context, and active modules. Its `renderUI()` draws a fixed 210px sidebar (navigation) and a scrollable content area (active module).
-- `modules/` — Self-contained processing modules. Each module owns its parameters and renders its own ImGui controls + image output. Currently: `ThresholdModule` and `EdgeDetectionModule`.
-- `core/` — `ImageLoader` wraps `cv::imread`; `Utils` handles `cv::Mat → OpenGL texture` conversion (BGR→RGB, 1-byte alignment, `GL_TEXTURE_2D` upload).
+- `modules/` — Self-contained processing modules. Each module owns its parameters and renders its own ImGui controls, image output, and histograms. Currently: `ThresholdModule` and `EdgeDetectionModule`.
+- `core/` — Shared utilities: `ImageLoader` wraps `cv::imread`; `Utils` handles `cv::Mat → OpenGL texture` conversion (BGR→RGB, 1-byte alignment, `GL_TEXTURE_2D` upload); `HistogramUtils` computes normalized 256-bin histograms and per-image stats (mean, stddev, white/black pixel %); `FileDialog` wraps `tinyfiledialogs` for native open/save pickers; `gl.h` abstracts the OpenGL header (macOS uses `<OpenGL/gl3.h>` directly; Windows uses GLAD — always include `core/gl.h` before GLFW).
 
-**Adding a new module**: create files in `modules/`, add it to `App`'s sidebar navigation and content switch, instantiate it in `App::init()`.
+**UI language**: All user-facing strings are in Spanish. New controls must follow suit; accented characters (á é í ó ú ñ ü ¡ ¿) are covered by the Latin-1 font range already loaded in `App::init()`.
 
-**Processing flow**: image load → OpenCV processing → `Utils::matToTexture()` → `ImGui::Image()` for display. Textures are re-uploaded on every parameter change.
+**Adding a new module**: create files in `modules/`, implement `renderUI()` and `loadAndProcess(const std::string& path)`, add it to `App`'s `ActiveModule` enum, sidebar nav (`renderSidebar()`), and content switch (`renderContent()`), then instantiate it in `App::init()`. The sidebar already has a disabled "ML Comparativo" placeholder for the next planned module. Wrap the entire `renderUI()` body in `ImGui::PushID("ModuleName")` / `ImGui::PopID()` to avoid widget ID collisions between modules.
+
+**Processing flow**: image load → `loadAndProcess()` → OpenCV processing → `Utils::matToTexture()` / `Utils::updateTexture()` → `ImGui::Image()` for display. Textures are re-uploaded on every parameter change via the `m_needsProcess` flag (set in ImGui callbacks, consumed in `renderUI()` to call `reprocess()`).
+
+### Texture ownership
+
+`Texture` (defined in `core/Utils.h`) is a plain struct holding a `GLuint id` + dimensions. Modules own `Texture` members and are responsible for calling `Utils::deleteTexture()` in their destructors. `Utils::updateTexture()` deletes the old GPU texture and uploads a fresh one — call it instead of `matToTexture()` when the slot already exists.
 
 ### Module details
 
@@ -33,6 +39,8 @@ CVSuite is a desktop image processing tool built with OpenCV + ImGui + OpenGL 3.
 - **OCR**: Otsu + Adaptive (block size, C constant)
 - **Medical Segmentation**: two-level intensity-band thresholding (lo/hi threshold pair)
 - **Industrial Inspection**: blur + threshold for defect detection (sensitivity)
+
+Each mode renders two result images and their histograms side-by-side with the original.
 
 `EdgeDetectionModule` — two modes:
 - **OCR/Document**: Canny edge detection (Gaussian kernel, low/high thresholds, Sobel aperture)
@@ -42,16 +50,22 @@ CVSuite is a desktop image processing tool built with OpenCV + ImGui + OpenGL 3.
 
 | Dependency | How it arrives |
 |-----------|---------------|
-| OpenCV 4.x | Homebrew (`/opt/homebrew/opt/opencv`) |
+| OpenCV 4.x | Homebrew (`/opt/homebrew`) |
 | ImGui v1.91.6 | CMake `FetchContent` (auto-downloaded) |
-| GLFW3 | System via `PkgConfig` |
+| tinyfiledialogs | CMake `FetchContent` (auto-downloaded) |
+| GLFW3 | Homebrew via `find_package(glfw3 CONFIG)` |
 | OpenGL 3.3 core | macOS system frameworks |
 
-macOS frameworks linked explicitly: `Cocoa`, `CoreVideo`, `IOKit`.
+macOS frameworks linked explicitly: `OpenGL`, `Cocoa`, `CoreVideo`, `IOKit`.
+
+## Windows support
+
+The project also builds on Windows via vcpkg (`vcpkg.json` at root). On Windows: GLAD is required (linked via `glad::glad`), `comdlg32`/`ole32` are linked for tinyfiledialogs, and MSVC gets `/utf-8` for Spanish string literals. A `bootstrap.bat` and pre-built `CVSuite-windows.zip` exist in the repo root.
 
 ## CMake Notes
 
 - C++17, `CMAKE_CXX_EXTENSIONS OFF`
 - Binary output: `build/bin/CVSuite`
-- OpenGL 3.3 core profile hint set in GLFW init code (required on macOS)
+- OpenGL 3.3 core profile hint set in GLFW init (`GLFW_OPENGL_FORWARD_COMPAT` required on macOS)
 - `GL_SILENCE_DEPRECATION` and `GLFW_INCLUDE_NONE` defined globally
+- macOS RPATH set to `/opt/homebrew/opt/opencv/lib` so the binary finds OpenCV dylibs at runtime without `install_name_tool`

@@ -9,6 +9,7 @@
 #include "App.h"
 #include "modules/ThresholdModule.h"
 #include "modules/EdgeDetectionModule.h"
+#include "modules/DocumentCleanupModule.h"
 
 #include <cstdio>
 
@@ -96,8 +97,9 @@ bool App::init()
     ImGui_ImplOpenGL3_Init("#version 150");
 
     // ── Modules ──────────────────────────────────────────────────────────────
-    m_thresholdModule = std::make_unique<ThresholdModule>();
-    m_edgeModule      = std::make_unique<EdgeDetectionModule>();
+    m_thresholdModule  = std::make_unique<ThresholdModule>();
+    m_edgeModule       = std::make_unique<EdgeDetectionModule>();
+    m_docCleanupModule = std::make_unique<DocumentCleanupModule>();
 
     return true;
 }
@@ -192,6 +194,7 @@ void App::renderSidebar()
     ImGui::Spacing();
     navButton("Umbralización",      ActiveModule::Threshold);
     navButton("Detección de bordes", ActiveModule::EdgeDetection);
+    navButton("Document Cleanup",    ActiveModule::DocumentCleanup);
 
     // ── Módulos futuros ──────────────────────────────────────────────────────
     ImGui::Spacing();
@@ -225,6 +228,10 @@ void App::renderContent()
 
     case ActiveModule::EdgeDetection:
         m_edgeModule->renderUI();
+        break;
+
+    case ActiveModule::DocumentCleanup:
+        m_docCleanupModule->renderUI();
         break;
     }
 }

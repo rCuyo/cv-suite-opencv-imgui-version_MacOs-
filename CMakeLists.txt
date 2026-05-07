@@ -64,6 +64,7 @@ set(APP_SOURCES
     core/FileDialog.cpp
     modules/ThresholdModule.cpp
     modules/EdgeDetectionModule.cpp
+    modules/DocumentCleanupModule.cpp
     ${tinyfiledialogs_SOURCE_DIR}/tinyfiledialogs.c
 )
 
@@ -110,11 +111,19 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     $<$<PLATFORM_ID:Windows>:opengl32>
     $<$<PLATFORM_ID:Windows>:comdlg32>
     $<$<PLATFORM_ID:Windows>:ole32>
-    $<$<PLATFORM_ID:Darwin>:-framework OpenGL>
-    $<$<PLATFORM_ID:Darwin>:-framework Cocoa>
-    $<$<PLATFORM_ID:Darwin>:-framework IOKit>
-    $<$<PLATFORM_ID:Darwin>:-framework CoreVideo>
 )
+
+# CMake 4.x mishandles "-framework Foo" in both target_link_libraries and target_link_options.
+# find_library returns the full .framework path, which links correctly on any CMake version.
+if(APPLE)
+    find_library(FW_OPENGL   OpenGL   REQUIRED)
+    find_library(FW_COCOA    Cocoa    REQUIRED)
+    find_library(FW_IOKIT    IOKit    REQUIRED)
+    find_library(FW_COREVIDEO CoreVideo REQUIRED)
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        ${FW_OPENGL} ${FW_COCOA} ${FW_IOKIT} ${FW_COREVIDEO}
+    )
+endif()
 
 # ─── Directorio de salida ─────────────────────────────────────────────────────
 

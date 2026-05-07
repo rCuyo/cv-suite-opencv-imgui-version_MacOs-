@@ -7,8 +7,9 @@ struct GLFWwindow;
 
 class ThresholdModule;
 class EdgeDetectionModule;
+class DocumentCleanupModule;
 
-enum class ActiveModule { None, Threshold, EdgeDetection };
+enum class ActiveModule { None, Threshold, EdgeDetection, DocumentCleanup };
 
 class App
 {
@@ -31,6 +32,7 @@ private:
     GLFWwindow*   m_window       = nullptr;
     ActiveModule  m_activeModule = ActiveModule::None;
 
-    std::unique_ptr<ThresholdModule>    m_thresholdModule;
-    std::unique_ptr<EdgeDetectionModule> m_edgeModule;
+    std::unique_ptr<ThresholdModule>       m_thresholdModule;
+    std::unique_ptr<EdgeDetectionModule>   m_edgeModule;
+    std::unique_ptr<DocumentCleanupModule> m_docCleanupModule;
 };

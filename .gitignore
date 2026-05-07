@@ -5,6 +5,7 @@ cmake-build-*/
 
 # macOS
 .DS_Store
+*.dSYM/
 
 # CMake
 CMakeCache.txt
@@ -26,3 +27,9 @@ compile_commands.json
 
 # ImGui config
 imgui.ini
+
+#vcpkg
+vcpkg/
+
+#logs
+*.log
