@@ -2,6 +2,8 @@
 #include "core/ImageLoader.h"
 #include "core/FileDialog.h"
 #include "core/HistogramUtils.h"
+#include "core/ExportUtils.h"
+#include "core/HistogramRenderer.h"
 #include "imgui.h"
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -149,10 +151,55 @@ void ThresholdModule::renderUI()
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
+
+        // Determine prefix from active mode
+        auto modePrefix = [&]() -> std::string {
+            switch (m_mode) {
+            case ThresholdMode::OCR:                  return "ocr_resultado";
+            case ThresholdMode::MedicalSegmentation:  return "medical_resultado";
+            case ThresholdMode::IndustrialInspection: return "industrial_resultado";
+            }
+            return "threshold_resultado";
+        };
+
         if (ImGui::Button("Exportar resultado", ImVec2(140, 0))) {
-            std::string p = FileDialog::saveImage();
-            if (!p.empty())
-                cv::imwrite(p, m_resultA);
+            std::string path = ExportUtils::nextExportPath("exports", modePrefix());
+            if (cv::imwrite(path, m_resultA))
+                std::fprintf(stdout, "[Threshold] Exportado: %s\n", path.c_str());
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Exportar histogramas", ImVec2(150, 0))) {
+            auto prefix = [&](const std::string& label) {
+                std::string p;
+                switch (m_mode) {
+                case ThresholdMode::OCR:                  p = "ocr_histograma_";          break;
+                case ThresholdMode::MedicalSegmentation:  p = "medical_histograma_";      break;
+                case ThresholdMode::IndustrialInspection: p = "industrial_histograma_";   break;
+                }
+                return p + label;
+            };
+
+            HistogramRenderer::renderAndSave(
+                m_histOrig,
+                ExportUtils::nextExportPath("exports", prefix("original")),
+                "Original");
+
+            HistogramRenderer::renderAndSave(
+                m_histA,
+                ExportUtils::nextExportPath("exports", prefix(
+                    m_mode == ThresholdMode::OCR ? "otsu" :
+                    m_mode == ThresholdMode::MedicalSegmentation ? "segmentado" :
+                    "defectos")),
+                m_labelA);
+
+            if (m_mode == ThresholdMode::OCR && !m_resultB.empty()) {
+                HistogramRenderer::renderAndSave(
+                    m_histB,
+                    ExportUtils::nextExportPath("exports", prefix("adaptive")),
+                    "Adaptive");
+            }
         }
     }
 

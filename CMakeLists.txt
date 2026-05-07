@@ -62,6 +62,8 @@ set(APP_SOURCES
     core/Utils.cpp
     core/HistogramUtils.cpp
     core/FileDialog.cpp
+    core/ExportUtils.cpp
+    core/HistogramRenderer.cpp
     modules/ThresholdModule.cpp
     modules/EdgeDetectionModule.cpp
     modules/DocumentCleanupModule.cpp

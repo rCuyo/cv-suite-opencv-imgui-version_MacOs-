@@ -4,6 +4,7 @@
 #include "core/HistogramUtils.h"
 #include <array>
 #include <string>
+#include <vector>
 
 enum class ThresholdMode {
     OCR,                 // Binarise documents for text recognition

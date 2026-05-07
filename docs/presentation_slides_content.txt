@@ -1,0 +1,567 @@
+%% ============================================================
+%%  CVSuite — Contenido para Presentación Académica / Tesis
+%%  Pegar en Overleaf | Compilar con pdflatex o xelatex
+%%  Todo el texto en español
+%% ============================================================
+
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\title{\textbf{CVSuite}\\[0.4em]
+       \large Suite de Procesamiento de Imágenes con Visión por Computadora\\
+       Documentación Académica}
+\author{Robert}
+\date{2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+%% ============================================================
+\section{Descripción General del Proyecto}
+%% ============================================================
+
+\subsection{¿Qué es CVSuite?}
+
+CVSuite es una herramienta de escritorio para el procesamiento interactivo de
+imágenes basada en visión por computadora. Permite al usuario cargar una imagen,
+ajustar parámetros en tiempo real mediante controles gráficos y visualizar
+inmediatamente el resultado del algoritmo seleccionado.
+
+El objetivo central es proporcionar una plataforma educativa e industrial que
+reúna los algoritmos clásicos más relevantes del procesamiento de imágenes bajo
+una interfaz gráfica intuitiva, sin depender de entornos de scripting como Python
+o MATLAB.
+
+\subsection{Tecnologías utilizadas}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Tecnología} & \textbf{Versión} & \textbf{Función} \\
+\midrule
+OpenCV              & 4.x              & Procesamiento de imágenes \\
+Dear ImGui          & v1.91.6          & Interfaz gráfica inmediata \\
+GLFW                & 3.4              & Gestión de ventana y contexto OpenGL \\
+OpenGL              & 3.3 Core         & Renderizado de texturas en GPU \\
+CMake               & 3.21+            & Sistema de construcción multiplataforma \\
+C++17               & —                & Lenguaje de implementación \\
+\bottomrule
+\end{tabular}
+\caption{Pila tecnológica de CVSuite}
+\end{table}
+
+\subsection{¿Por qué OpenCV + Dear ImGui?}
+
+\textbf{OpenCV} es la biblioteca de visión por computadora más utilizada en la
+industria y la academia. Proporciona implementaciones optimizadas de transformadas,
+filtros, detectores de bordes y operaciones morfológicas que funcionan de forma
+eficiente sobre \texttt{cv::Mat}, su estructura de datos central.
+
+\textbf{Dear ImGui} implementa el paradigma de \emph{Immediate Mode GUI}: en lugar
+de mantener un árbol de widgets persistente, la interfaz se reconstruye cada fotograma
+llamando a funciones de dibujo directamente en el bucle de renderizado. Esto elimina
+la complejidad de gestión de estado, reduce el código de ``pegamento'' entre la lógica
+y la UI, y facilita la sincronización inmediata entre los controles deslizantes y el
+resultado visible.
+
+La combinación resulta ideal para herramientas de prototipado rápido de algoritmos:
+cada cambio de parámetro activa inmediatamente el reprocesado de la imagen y la
+actualización de la textura en GPU.
+
+\subsection{Arquitectura modular}
+
+CVSuite organiza su código en tres capas:
+
+\begin{itemize}
+  \item \textbf{Capa de aplicación} (\texttt{app/}): La clase \texttt{App}
+        gestiona la ventana GLFW, el contexto ImGui y los módulos activos.
+        Su método \texttt{renderUI()} dibuja una barra lateral de navegación
+        (210~px fija) y un área de contenido desplazable donde se renderiza
+        el módulo seleccionado.
+
+  \item \textbf{Módulos} (\texttt{modules/}): Cada módulo es una unidad
+        autocontenida que posee sus parámetros, ejecuta el procesamiento OpenCV
+        y renderiza sus propios controles, imágenes e histogramas. Los módulos
+        actuales son: \texttt{ThresholdModule}, \texttt{EdgeDetectionModule}
+        y \texttt{DocumentCleanupModule}.
+
+  \item \textbf{Utilidades comunes} (\texttt{core/}): Incluye
+        \texttt{ImageLoader}, \texttt{Utils} (conversión \texttt{cv::Mat}~→
+        textura OpenGL), \texttt{HistogramUtils}, \texttt{HistogramRenderer},
+        \texttt{ExportUtils} y \texttt{FileDialog}.
+\end{itemize}
+
+\subsection{Procesamiento de imágenes en tiempo real}
+
+El flujo de procesamiento sigue el patrón:
+
+\[
+\text{Carga} \xrightarrow{\texttt{loadAndProcess()}}
+\text{OpenCV} \xrightarrow{\texttt{matToTexture()}}
+\text{GPU} \xrightarrow{\texttt{ImGui::Image()}}
+\text{Pantalla}
+\]
+
+Las texturas se resuben a la GPU en cada cambio de parámetro mediante el indicador
+\texttt{m\_needsProcess}, que el módulo activa en los callbacks de ImGui y consume
+en \texttt{renderUI()} para invocar \texttt{reprocess()}.
+
+%% ============================================================
+\section{Teoría de Umbralización (\emph{Thresholding})}
+%% ============================================================
+
+\subsection{Concepto de umbral binario}
+
+La umbralización es la operación más elemental de segmentación. Dado un valor
+umbral $T$ y un píxel de intensidad $I(x,y) \in [0,255]$, la imagen binaria
+resultante $B(x,y)$ se define como:
+
+\begin{equation}
+B(x,y) =
+\begin{cases}
+255 & \text{si } I(x,y) > T \\
+0   & \text{en caso contrario}
+\end{cases}
+\label{eq:threshold}
+\end{equation}
+
+El objetivo es separar objetos de interés del fondo mediante la elección óptima
+de $T$.
+
+\subsection{Umbral de Otsu}
+
+El método de Otsu (1979) calcula automáticamente el umbral óptimo $T^*$
+maximizando la varianza \emph{inter-clases} $\sigma_B^2$, equivalente a
+minimizar la varianza \emph{intra-clases}:
+
+\begin{equation}
+T^* = \arg\max_T \, \sigma_B^2(T)
+\end{equation}
+
+donde
+
+\begin{equation}
+\sigma_B^2(T) = w_0(T)\,w_1(T)\,\bigl[\mu_0(T) - \mu_1(T)\bigr]^2
+\end{equation}
+
+siendo $w_0, w_1$ las probabilidades de cada clase y $\mu_0, \mu_1$ sus medias
+de intensidad, calculadas directamente del histograma de la imagen.
+
+\textbf{Ventajas}: no requiere parámetros del usuario; óptimo para imágenes con
+histograma bimodal (texto sobre fondo blanco, piezas sobre cinta transportadora).
+
+\textbf{Desventajas}: falla ante iluminación no uniforme, porque un único $T$ no
+puede compensar variaciones locales de brillo.
+
+\subsection{Umbral adaptativo (local)}
+
+El umbral adaptativo calcula un valor $T(x,y)$ diferente para cada píxel a partir
+de su vecindad de tamaño $k \times k$:
+
+\begin{equation}
+T(x,y) = \mu_k(x,y) - C
+\label{eq:adaptive}
+\end{equation}
+
+donde $\mu_k(x,y)$ es la media (o media ponderada gaussiana) de los píxeles en la
+ventana de bloque $k$, y $C$ es una constante de corrección.
+
+\textbf{Ventajas}: robusto ante gradientes de iluminación; idóneo para documentos
+con sombras o imágenes médicas con contraste variable.
+
+\textbf{Desventajas}: mayor costo computacional $O(N)$; sensible a ruido si $k$ es
+pequeño.
+
+\subsection{Umbralización industrial (detección de defectos)}
+
+En entornos industriales con iluminación estructurada, los defectos superficiales
+(grietas, manchas) presentan intensidades significativamente menores que la
+superficie libre de defectos. El pipeline aplicado en CVSuite es:
+
+\begin{enumerate}
+  \item Suavizado gaussiano para suprimir ruido de sensor.
+  \item Umbral global de inversión: píxeles con $I < T_d$ se clasifican como defecto.
+  \item Apertura morfológica para eliminar falsos positivos de un solo píxel.
+  \item Detección de contornos y bounding boxes para localizar y cuantificar defectos.
+\end{enumerate}
+
+\textbf{Ventajas frente a ML}: determinista, sin datos de entrenamiento, latencia
+$O(N)$, totalmente explicable para auditores de calidad.
+
+\subsection{Segmentación médica por banda de intensidad}
+
+La segmentación médica de CVSuite aísla tejidos por su rango de intensidad:
+
+\begin{equation}
+B(x,y) =
+\begin{cases}
+1 & \text{si } T_{\text{lo}} \le I(x,y) \le T_{\text{hi}} \\
+0 & \text{en caso contrario}
+\end{cases}
+\end{equation}
+
+La máscara resultante se superpone en rojo sobre la imagen original para facilitar
+la interpretación clínica. El usuario ajusta $T_{\text{lo}}$ y $T_{\text{hi}}$
+hasta aislar la región de interés anatómica.
+
+\subsection{Interpretación del histograma en umbralización}
+
+Un histograma bimodal (dos picos separados) indica que la imagen contiene dos clases
+bien diferenciadas de píxeles. El umbral óptimo de Otsu cae entre los dos picos.
+Un histograma unimodal o con múltiples picos sugiere que un umbral global será
+insuficiente y el método adaptativo será más apropiado.
+
+%% ============================================================
+\section{Detector de Bordes de Canny}
+%% ============================================================
+
+\subsection{Motivación}
+
+Un borde es una discontinuidad de intensidad en la imagen causada por cambios
+físicos reales: fronteras de objetos, cambios de material, sombras, etc. El
+detector de Canny (1986) es el algoritmo de referencia porque logra tres objetivos
+simultáneos: buena detección (no perderse bordes reales), buena localización
+(borde en el píxel correcto) y respuesta única (un solo punto por borde real).
+
+\subsection{Pipeline completo}
+
+\subsubsection{Paso 1 — Suavizado gaussiano}
+
+La imagen se convuelve con un kernel gaussiano $G_\sigma$ para suprimir ruido
+de alta frecuencia antes de calcular derivadas:
+
+\begin{equation}
+I_s = I * G_\sigma, \quad
+G_\sigma(x,y) = \frac{1}{2\pi\sigma^2}
+  \exp\!\left(-\frac{x^2+y^2}{2\sigma^2}\right)
+\end{equation}
+
+Un kernel más grande elimina más ruido pero puede fusionar bordes próximos.
+
+\subsubsection{Paso 2 — Gradiente de Sobel}
+
+Se aplican dos operadores Sobel de tamaño $k\times k$ ($k \in \{3,5,7\}$) para
+estimar las derivadas parciales de intensidad:
+
+\begin{equation}
+G_x = I_s * S_x, \quad G_y = I_s * S_y
+\end{equation}
+
+La magnitud y dirección del gradiente son:
+
+\begin{equation}
+G = \sqrt{G_x^2 + G_y^2}, \qquad
+\theta = \arctan\!\left(\frac{G_y}{G_x}\right)
+\end{equation}
+
+\subsubsection{Paso 3 — Supresión de no-máximos}
+
+Solo se conservan los píxeles que son máximo local en la dirección del gradiente,
+adelgazando las crestas a exactamente 1 píxel de ancho.
+
+\subsubsection{Paso 4 — Umbralización por histéresis}
+
+Usando dos umbrales $T_{\text{low}}$ y $T_{\text{high}}$:
+
+\begin{itemize}
+  \item $G > T_{\text{high}}$: borde definitivo (siempre conservado).
+  \item $T_{\text{low}} < G \le T_{\text{high}}$: borde débil (conservado solo si
+        conectado en 8-vecindad a un borde definitivo).
+  \item $G \le T_{\text{low}}$: descartado.
+\end{itemize}
+
+Este mecanismo elimina ruido aislado y preserva continuidad de bordes reales.
+
+\subsection{Ventajas y desventajas}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Ventajas} & \textbf{Desventajas} \\
+\midrule
+Bordes delgados (1 px)         & Sensible a elección de $\sigma$ \\
+Dos umbrales = control fino    & Costoso con kernels grandes \\
+Robusto ante ruido moderado    & No distingue causa del borde \\
+Implementación eficiente $O(N)$& Puede fragmentar bordes débiles \\
+\bottomrule
+\end{tabular}
+\caption{Comparación de ventajas y desventajas de Canny}
+\end{table}
+
+\subsection{Aplicaciones industriales}
+
+\begin{itemize}
+  \item Inspección de soldaduras y piezas mecanizadas.
+  \item Lectura de códigos de barras y QR.
+  \item Preprocesamiento para OCR (delimitación de zonas de texto).
+  \item Segmentación de órganos en imágenes médicas (TAC, resonancia magnética).
+\end{itemize}
+
+%% ============================================================
+\section{Controles de la Interfaz (Sliders)}
+%% ============================================================
+
+Cada control deslizante de CVSuite corresponde a un parámetro matemático bien
+definido. A continuación se describe el significado computacional de cada uno.
+
+\subsection{Umbral de oscuridad de defecto (\texttt{m\_defectThresh})}
+
+Rango: $[1, 120]$. Representa el valor $T_d$ en la ec.~\eqref{eq:threshold} para el
+modo Industrial. Un valor bajo clasifica como defecto solo los píxeles más oscuros
+(defectos profundos); un valor alto amplía la región detectada, pudiendo introducir
+falsos positivos sobre superficies rugosas normales.
+
+\subsection{Tamaño de kernel gaussiano (\texttt{m\_gaussBlurSize}, \texttt{m\_gaussKernel})}
+
+Rango: $[1, 21]$ (debe ser impar). Controla $\sigma$ del filtro de suavizado previo.
+Kernels más grandes atenúan ruido de alta frecuencia pero reducen la nitidez de bordes
+delgados. En detección de bordes Canny, un kernel mayor produce contornos más suaves
+y continuos; en umbralización industrial, reduce detecciones espurias.
+
+\subsection{Tamaño de bloque adaptativo (\texttt{m\_adaptiveBlockSize})}
+
+Rango: $[3, 51]$ (impar). Define el tamaño $k$ de la ventana local en la
+ec.~\eqref{eq:adaptive}. Valores pequeños capturan variaciones de iluminación muy
+locales (ideal para texto pequeño); valores grandes producen resultados más similares
+al umbral global de Otsu.
+
+\subsection{Constante C adaptativa (\texttt{m\_adaptiveC})}
+
+Rango: $[-10, 20]$. Ajusta el sesgo $C$ en la ec.~\eqref{eq:adaptive}. Aumentar $C$
+requiere que un píxel sea $C$ unidades más oscuro que su vecindad para clasificarse
+como primer plano, reduciendo el ruido en el resultado binario. Valores negativos
+clasifican más píxeles como primer plano, útil cuando el contraste es bajo.
+
+\subsection{Umbrales inferior y superior de Canny (\texttt{m\_cannyLow}, \texttt{m\_cannyHigh})}
+
+Determinan $T_{\text{low}}$ y $T_{\text{high}}$ del paso de histéresis. La relación
+recomendada es $T_{\text{high}} \approx 2\text{–}3 \times T_{\text{low}}$. Un cociente
+menor retiene más bordes débiles pero aumenta el ruido; un cociente mayor produce
+contornos más limpios pero puede fragmentarlos.
+
+\subsection{Apertura Sobel (\texttt{m\_apertureSize})}
+
+Opciones: $\{3, 5, 7\}$. Tamaño $k$ del operador Sobel. Un kernel $3 \times 3$ es
+estándar y rápido; $5 \times 5$ o $7 \times 7$ producen gradientes más suaves y
+precisos en imágenes de baja resolución, a costa de mayor tiempo de cómputo.
+
+\subsection{Umbrales médicos inferior y superior (\texttt{m\_medLow}, \texttt{m\_medHigh})}
+
+Definen la banda de intensidad $[T_{\text{lo}}, T_{\text{hi}}]$ para la segmentación
+médica. El usuario ajusta ambos valores hasta aislar visualmente la región anatómica
+de interés en la superposición en color.
+
+\subsection{Área mínima de contorno (\texttt{m\_minContourArea})}
+
+Rango: $[0, 5000]$ px². Filtra contornos detectados con área inferior al umbral,
+eliminando artefactos de un solo píxel o ruido de digitización. Esencial en el modo
+Segmentación de \texttt{EdgeDetectionModule} para distinguir objetos reales de ruido.
+
+%% ============================================================
+\section{Histogramas de Intensidad}
+%% ============================================================
+
+\subsection{¿Qué representan los histogramas?}
+
+Un histograma de intensidad $h[v]$ cuenta el número de píxeles con nivel de gris
+$v \in [0, 255]$:
+
+\begin{equation}
+h[v] = \#\{(x,y) : I(x,y) = v\}
+\end{equation}
+
+En CVSuite los histogramas están normalizados mediante \texttt{cv::NORM\_MINMAX}
+para que el bin de mayor frecuencia siempre ocupe el $100\%$ del área de la gráfica,
+facilitando la comparación visual entre imágenes de diferente tamaño.
+
+\subsection{Distribuciones y su interpretación}
+
+\begin{itemize}
+  \item \textbf{Histograma bimodal}: dos picos separados indican imagen con fondo
+        claro y objetos oscuros (o viceversa). Favorable para Otsu.
+  \item \textbf{Histograma estrecho}: concentración en pocos tonos → bajo contraste.
+        Aplicar CLAHE o ecualización puede ampliar el rango.
+  \item \textbf{Histograma con picos en 0 y 255}: imagen ya binarizada o con clipping
+        de exposición extremo.
+  \item \textbf{Histograma plano}: alta entropía, buen contraste global.
+\end{itemize}
+
+\subsection{Relación con la umbralización}
+
+El umbral óptimo de Otsu corresponde al \emph{valle} entre los dos picos del
+histograma. Si el valle es profundo, la separación entre clases es limpia; si el
+histograma tiene múltiples picos o es unimodal, el umbral global producirá errores
+de clasificación y deberá usarse umbralización adaptativa.
+
+\subsection{Estadísticas complementarias}
+
+Junto al histograma, CVSuite calcula para cada imagen:
+
+\begin{itemize}
+  \item \textbf{Media} $\mu$: intensidad promedio; indica si la imagen es globalmente
+        oscura o clara.
+  \item \textbf{Desviación estándar} $\sigma$: dispersión de tonos; valores altos
+        indican alto contraste.
+  \item \textbf{Porcentaje de píxeles blancos/negros}: relevante para evaluar si el
+        resultado binario tiene clipping excesivo.
+\end{itemize}
+
+Estas métricas permiten ajustar parámetros de umbralización de forma más informada
+que solo la inspección visual.
+
+%% ============================================================
+\section{Módulo Industrial — Detección de Defectos}
+%% ============================================================
+
+\subsection{Fundamento}
+
+La inspección industrial automatizada requiere identificar anomalías superficiales
+(grietas, huecos, manchas) en piezas fabricadas. En entornos controlados con
+iluminación estructurada, los defectos tienen intensidades sistemáticamente menores
+que las superficies correctas, lo que permite su detección mediante umbralización
+de inversión.
+
+\subsection{Pipeline de CVSuite — Modo Industrial}
+
+\begin{enumerate}
+  \item \textbf{Suavizado gaussiano}: $I_s = I * G_k$. Elimina ruido granular del
+        sensor sin borrar los defectos, que son estructuras de área mayor.
+
+  \item \textbf{Umbral de inversión}:
+        $M(x,y) = 1 \Leftrightarrow I_s(x,y) < T_d$.
+        Los píxeles más oscuros que $T_d$ forman la máscara de defecto.
+
+  \item \textbf{Apertura morfológica} con elemento estructurante $3 \times 3$:
+        elimina detecciones aisladas de 1 píxel (falsos positivos por ruido).
+        La apertura = erosión seguida de dilatación preserva la forma de
+        los defectos reales pero suprime el ruido puntual.
+
+  \item \textbf{Detección de contornos}: \texttt{cv::findContours} extrae las
+        regiones conectadas de la máscara.
+
+  \item \textbf{Bounding boxes}: \texttt{cv::boundingRect} calcula el rectángulo
+        mínimo que contiene cada defecto, superpuesto sobre la imagen original.
+\end{enumerate}
+
+\subsection{Detección de grietas}
+
+Las grietas aparecen como estructuras lineales de baja intensidad. El pipeline
+las detecta siempre que su ancho supere el ruido de fondo; la apertura morfológica
+actúa como filtro de longitud mínima efectivo para grietas superficiales.
+
+%% ============================================================
+\section{Módulo Médico — Segmentación por Intensidad}
+%% ============================================================
+
+\subsection{Motivación clínica}
+
+En imágenes de tomografía computarizada (TC) o resonancia magnética (RM) en escala
+de grises, diferentes tejidos aparecen en rangos de intensidad característicos
+(unidades Hounsfield en TC). La segmentación por banda de intensidad permite aislar
+hueso, tejido blando o fluidos sin necesidad de modelos de aprendizaje automático.
+
+\subsection{Implementación en CVSuite}
+
+\begin{equation}
+M(x,y) =
+\begin{cases}
+1 & \text{si } T_{\text{lo}} \le I(x,y) \le T_{\text{hi}} \\
+0 & \text{en caso contrario}
+\end{cases}
+\end{equation}
+
+La máscara $M$ se aplica sobre la imagen original como overlay en color rojo
+(\texttt{BGR: (0, 0, 220)}), manteniendo el contexto anatómico visible.
+
+\subsection{Ajuste de parámetros}
+
+El operador ajusta $T_{\text{lo}}$ y $T_{\text{hi}}$ observando simultáneamente la
+imagen superpuesta y el histograma. La región de interés anatómica aparece como
+un pico o meseta en el histograma; los dos umbrales deben colocarse en los extremos
+de ese pico.
+
+%% ============================================================
+\section{Módulo OCR — Preprocesamiento de Documentos}
+%% ============================================================
+
+\subsection{El problema del OCR}
+
+El reconocimiento óptico de caracteres (OCR) requiere imágenes binarias de alto
+contraste donde los caracteres sean negros sobre fondo blanco (o viceversa).
+Las fotografías de documentos presentan iluminación no uniforme, sombras y
+gradientes que un umbral global maneja mal.
+
+\subsection{Otsu vs.\ adaptativo para documentos}
+
+\begin{itemize}
+  \item \textbf{Otsu}: efectivo cuando el documento tiene iluminación uniforme y el
+        histograma es claramente bimodal. Falla ante sombras parciales porque un
+        único $T$ no puede compensar el gradiente de iluminación.
+
+  \item \textbf{Adaptativo gaussiano}: calcula $T(x,y)$ localmente, compensando
+        automáticamente las variaciones de iluminación. Es el método estándar en
+        pipelines de OCR profesionales (Tesseract, PaddleOCR).
+\end{itemize}
+
+\subsection{Separación texto-fondo}
+
+La umbralización adaptativa produce una máscara binaria donde los caracteres
+aparecen como regiones conectadas de alta densidad. Esta máscara puede alimentar
+directamente un motor OCR o ser procesada con \texttt{cv::findContours} para
+extraer bounding boxes de palabras y líneas.
+
+\subsection{Document Cleanup — Pipeline avanzado}
+
+El módulo \texttt{DocumentCleanupModule} extiende el preprocesamiento OCR con:
+
+\begin{enumerate}
+  \item \textbf{Corrección de perspectiva}: detecta el contorno cuadrilátero más
+        grande de la imagen (suponiendo que es la hoja de papel) y aplica
+        \texttt{cv::getPerspectiveTransform} + \texttt{cv::warpPerspective} para
+        obtener una vista cenital.
+
+  \item \textbf{Reducción de sombras (CLAHE)}: ecualización adaptativa del
+        histograma con límite de contraste para normalizar la iluminación sin
+        amplificar ruido.
+
+  \item \textbf{Ruido} → desenfoque gaussiano.
+
+  \item \textbf{Nitidez} → máscara de desenfoque (\emph{unsharp mask}):
+        $I_{\text{sharp}} = (1+\alpha)\,I - \alpha\,G_\sigma * I$.
+
+  \item \textbf{Binarización} → umbral adaptativo gaussiano.
+
+  \item \textbf{Limpieza morfológica} (opcional) → apertura $2 \times 2$ para
+        eliminar puntos de ruido en la imagen binarizada.
+\end{enumerate}
+
+%% ============================================================
+\section{Conclusiones}
+%% ============================================================
+
+CVSuite demuestra que los algoritmos clásicos de visión por computadora, cuando
+se integran en una interfaz interactiva con retroalimentación inmediata, constituyen
+herramientas de alto valor educativo e industrial. La arquitectura modular facilita
+la incorporación de nuevos algoritmos sin modificar el código existente, y la
+separación entre lógica de procesamiento y presentación garantiza la mantenibilidad
+a largo plazo.
+
+Las tres capas (aplicación, módulos, utilidades), el patrón de reprocessado perezoso
+mediante \texttt{m\_needsProcess}, y la propiedad exclusiva de texturas GPU por parte
+de cada módulo, constituyen un diseño robusto y extensible que puede escalar a
+aplicaciones de procesamiento de imágenes más complejas.
+
+\end{document}

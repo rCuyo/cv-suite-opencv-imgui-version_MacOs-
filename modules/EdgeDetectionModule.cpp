@@ -1,6 +1,9 @@
 #include "EdgeDetectionModule.h"
 #include "core/ImageLoader.h"
 #include "core/FileDialog.h"
+#include "core/ExportUtils.h"
+#include "core/HistogramUtils.h"
+#include "core/HistogramRenderer.h"
 #include "imgui.h"
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -122,12 +125,29 @@ void EdgeDetectionModule::renderUI()
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
+
         if (ImGui::Button("Exportar resultado", ImVec2(140, 0))) {
-            std::string p = FileDialog::saveImage();
-            if (!p.empty()) {
-                cv::Mat toExport = m_texContours.valid() ? m_contourViz : m_edges;
-                cv::imwrite(p, toExport);
-            }
+            cv::Mat toExport = m_texContours.valid() ? m_contourViz : m_edges;
+            std::string path = ExportUtils::nextExportPath("exports", "canny_resultado");
+            if (cv::imwrite(path, toExport))
+                std::fprintf(stdout, "[Edge] Exportado: %s\n", path.c_str());
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Exportar histogramas", ImVec2(150, 0))) {
+            auto histOrig  = HistogramUtils::compute(m_gray);
+            auto histEdges = HistogramUtils::compute(m_edges);
+
+            HistogramRenderer::renderAndSave(
+                histOrig,
+                ExportUtils::nextExportPath("exports", "canny_histograma_original"),
+                "Original");
+
+            HistogramRenderer::renderAndSave(
+                histEdges,
+                ExportUtils::nextExportPath("exports", "canny_histograma_bordes"),
+                "Bordes Canny");
         }
     }
 

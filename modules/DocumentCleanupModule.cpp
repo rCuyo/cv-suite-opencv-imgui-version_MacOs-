@@ -2,6 +2,8 @@
 #include "core/ImageLoader.h"
 #include "core/FileDialog.h"
 #include "core/HistogramUtils.h"
+#include "core/ExportUtils.h"
+#include "core/HistogramRenderer.h"
 #include "imgui.h"
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -112,10 +114,25 @@ void DocumentCleanupModule::renderUI()
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
-        if (ImGui::Button("Export Result", ImVec2(110, 0))) {
-            std::string p = FileDialog::saveImage();
-            if (!p.empty())
-                cv::imwrite(p, m_result);
+
+        if (ImGui::Button("Exportar resultado", ImVec2(140, 0))) {
+            std::string path = ExportUtils::nextExportPath("exports", "document_cleanup");
+            if (cv::imwrite(path, m_result))
+                std::fprintf(stdout, "[DocCleanup] Exportado: %s\n", path.c_str());
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Exportar histogramas", ImVec2(150, 0))) {
+            HistogramRenderer::renderAndSave(
+                m_histOrig,
+                ExportUtils::nextExportPath("exports", "document_histograma_original"),
+                "Original");
+
+            HistogramRenderer::renderAndSave(
+                m_histResult,
+                ExportUtils::nextExportPath("exports", "document_histograma_limpio"),
+                "Limpio");
         }
     }
 
