@@ -10,6 +10,10 @@
 #include "modules/ThresholdModule.h"
 #include "modules/EdgeDetectionModule.h"
 #include "modules/DocumentCleanupModule.h"
+#include "modules/TransformModule.h"
+#include "modules/HistogramEqualizationModule.h"
+#include "modules/NoiseReductionModule.h"
+#include "modules/MorphologyModule.h"
 
 #include <cstdio>
 
@@ -100,6 +104,10 @@ bool App::init()
     m_thresholdModule  = std::make_unique<ThresholdModule>();
     m_edgeModule       = std::make_unique<EdgeDetectionModule>();
     m_docCleanupModule = std::make_unique<DocumentCleanupModule>();
+    m_transformModule  = std::make_unique<TransformModule>();
+    m_histEqModule     = std::make_unique<HistogramEqualizationModule>();
+    m_noiseModule      = std::make_unique<NoiseReductionModule>();
+    m_morphologyModule = std::make_unique<MorphologyModule>();
 
     return true;
 }
@@ -173,12 +181,11 @@ void App::renderUI()
 
 void App::renderSidebar()
 {
+    // ── Branding ──────────────────────────────────────────────────────────────
     ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "CV Suite");
     ImGui::TextDisabled("OpenCV %d.%d", CV_MAJOR_VERSION, CV_MINOR_VERSION);
-    ImGui::Separator();
-    ImGui::Spacing();
 
-    // Helper: draw a full-width button, highlighted when active
+    // Full-width nav button, highlighted when its module is active
     auto navButton = [&](const char* label, ActiveModule mod) {
         bool active = (m_activeModule == mod);
         if (active)
@@ -190,22 +197,33 @@ void App::renderSidebar()
             ImGui::PopStyleColor();
     };
 
-    ImGui::TextDisabled("MÓDULOS");
-    ImGui::Spacing();
-    navButton("Umbralización",      ActiveModule::Threshold);
-    navButton("Detección de bordes", ActiveModule::EdgeDetection);
-    navButton("Document Cleanup",    ActiveModule::DocumentCleanup);
+    // Colored section divider with module number and subtitle
+    auto sectionHeader = [&](const char* number, const char* subtitle, ImVec4 color) {
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        ImGui::TextColored(color, "%s", number);
+        ImGui::TextDisabled("  %s", subtitle);
+        ImGui::Spacing();
+    };
 
-    // ── Módulos futuros ──────────────────────────────────────────────────────
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::TextDisabled("PRÓXIMAMENTE");
-    ImGui::Spacing();
-    ImGui::BeginDisabled();
-    ImGui::Button("ML Comparativo",  ImVec2(-1, 32));
-    ImGui::EndDisabled();
+    // ── MÓDULO 1 — Segmentación y Bordes ─────────────────────────────────────
+    sectionHeader("MÓDULO 1", "Segmentación y Bordes",
+                  ImVec4(0.40f, 0.85f, 1.00f, 1.0f));
+    navButton("Umbralización",            ActiveModule::Threshold);
+    navButton("Detección de bordes",      ActiveModule::EdgeDetection);
+    navButton("Document Cleanup",         ActiveModule::DocumentCleanup);
 
-    // Pie de versión
+    // ── MÓDULO 2 — Transformaciones Geométricas y Mejora de Imagen ───────────
+    sectionHeader("MÓDULO 2", "Transf. y Mejora de Imagen",
+                  ImVec4(0.20f, 1.00f, 0.50f, 1.0f));
+    navButton("Geometric Transformations", ActiveModule::Transform);
+    navButton("Histogram Equalization",    ActiveModule::HistogramEq);
+
+    navButton("Noise Reduction & Filters",  ActiveModule::NoiseReduction);
+    navButton("Morphological Operations",  ActiveModule::Morphology);
+
+    // ── Pie de versión ────────────────────────────────────────────────────────
     ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 24.0f);
     ImGui::Separator();
     ImGui::TextDisabled(" v1.2");
@@ -232,6 +250,22 @@ void App::renderContent()
 
     case ActiveModule::DocumentCleanup:
         m_docCleanupModule->renderUI();
+        break;
+
+    case ActiveModule::Transform:
+        m_transformModule->renderUI();
+        break;
+
+    case ActiveModule::HistogramEq:
+        m_histEqModule->renderUI();
+        break;
+
+    case ActiveModule::NoiseReduction:
+        m_noiseModule->renderUI();
+        break;
+
+    case ActiveModule::Morphology:
+        m_morphologyModule->renderUI();
         break;
     }
 }

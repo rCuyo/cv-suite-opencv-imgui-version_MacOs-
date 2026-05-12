@@ -8,8 +8,12 @@ struct GLFWwindow;
 class ThresholdModule;
 class EdgeDetectionModule;
 class DocumentCleanupModule;
+class TransformModule;
+class HistogramEqualizationModule;
+class NoiseReductionModule;
+class MorphologyModule;
 
-enum class ActiveModule { None, Threshold, EdgeDetection, DocumentCleanup };
+enum class ActiveModule { None, Threshold, EdgeDetection, DocumentCleanup, Transform, HistogramEq, NoiseReduction, Morphology };
 
 class App
 {
@@ -35,4 +39,8 @@ private:
     std::unique_ptr<ThresholdModule>       m_thresholdModule;
     std::unique_ptr<EdgeDetectionModule>   m_edgeModule;
     std::unique_ptr<DocumentCleanupModule> m_docCleanupModule;
+    std::unique_ptr<TransformModule>             m_transformModule;
+    std::unique_ptr<HistogramEqualizationModule> m_histEqModule;
+    std::unique_ptr<NoiseReductionModule>        m_noiseModule;
+    std::unique_ptr<MorphologyModule>            m_morphologyModule;
 };

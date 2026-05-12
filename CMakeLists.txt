@@ -67,6 +67,10 @@ set(APP_SOURCES
     modules/ThresholdModule.cpp
     modules/EdgeDetectionModule.cpp
     modules/DocumentCleanupModule.cpp
+    modules/TransformModule.cpp
+    modules/HistogramEqualizationModule.cpp
+    modules/NoiseReductionModule.cpp
+    modules/MorphologyModule.cpp
     ${tinyfiledialogs_SOURCE_DIR}/tinyfiledialogs.c
 )
 

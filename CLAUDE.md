@@ -30,7 +30,14 @@ CVSuite is a desktop image processing tool built with OpenCV + ImGui + OpenGL 3.
 **Three-layer structure**:
 - `app/` — `App` class owns the GLFW window, ImGui context, and active modules. Its `renderUI()` draws a fixed 210px sidebar (navigation) and a scrollable content area (active module).
 - `modules/` — Self-contained processing modules. Each module owns its parameters and renders its own ImGui controls, image output, and histograms.
-- `core/` — Shared utilities: `ImageLoader` wraps `cv::imread`; `Utils` handles `cv::Mat → OpenGL texture` conversion (BGR→RGB, 1-byte alignment, `GL_TEXTURE_2D` upload); `HistogramUtils` computes normalized 256-bin histograms and per-image stats (mean, stddev, white/black pixel %); `FileDialog` wraps `tinyfiledialogs` for native open/save pickers; `gl.h` abstracts the OpenGL header (macOS uses `<OpenGL/gl3.h>` directly; Windows uses GLAD — always include `core/gl.h` before GLFW).
+- `core/` — Shared utilities:
+  - `ImageLoader` wraps `cv::imread`
+  - `Utils` handles `cv::Mat → OpenGL texture` conversion (BGR→RGB, 1-byte alignment, `GL_TEXTURE_2D` upload)
+  - `HistogramUtils` computes normalized 256-bin histograms and per-image stats (mean, stddev, white/black pixel %)
+  - `HistogramRenderer` renders a histogram `std::array<float,256>` to a `cv::Mat` image using OpenCV drawing primitives; also provides `renderAndSave()` for direct PNG export without screenshots
+  - `ExportUtils::nextExportPath(dir, prefix, ext)` generates the next available numbered filename (e.g. `ocr_resultado_3.png`) to avoid overwriting previous exports
+  - `FileDialog` wraps `tinyfiledialogs` for native open/save pickers
+  - `gl.h` abstracts the OpenGL header (macOS uses `<OpenGL/gl3.h>` directly; Windows uses GLAD — always include `core/gl.h` before GLFW)
 
 **UI language**: All user-facing strings are in Spanish. New controls must follow suit; accented characters (á é í ó ú ñ ü ¡ ¿) are covered by the Latin-1 font range already loaded in `App::init()`.
 
