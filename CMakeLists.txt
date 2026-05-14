@@ -72,6 +72,9 @@ set(APP_SOURCES
     modules/NoiseReductionModule.cpp
     modules/MorphologyModule.cpp
     modules/HOGPedestrianModule.cpp
+    modules/SIFTRecognitionModule.cpp
+    modules/ORBRecognitionModule.cpp
+    modules/LBPFaceRecognitionModule.cpp
     ${tinyfiledialogs_SOURCE_DIR}/tinyfiledialogs.c
 )
 

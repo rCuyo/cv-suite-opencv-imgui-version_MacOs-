@@ -41,7 +41,7 @@ CVSuite is a desktop image processing tool built with OpenCV + ImGui + OpenGL 3.
 
 **UI language**: All user-facing strings are in Spanish. New controls must follow suit; accented characters (á é í ó ú ñ ü ¡ ¿) are covered by the Latin-1 font range (0x0020–0x00FF) already loaded in `App::init()`. Platform fonts: Segoe UI 15px on Windows, Helvetica 15px on macOS.
 
-**Adding a new module**: create files in `modules/`, implement `renderUI()` and `loadAndProcess(const std::string& path)`, add it to `App`'s `ActiveModule` enum, sidebar nav (`renderSidebar()`), and content switch (`renderContent()`), then instantiate it in `App::init()`. The sidebar is divided into two color-coded groups (MÓDULO 1: Segmentación y Bordes; MÓDULO 2: Transf. y Mejora de Imagen) — add the nav button in the appropriate group. Wrap the entire `renderUI()` body in `ImGui::PushID("ModuleName")` / `ImGui::PopID()` to avoid widget ID collisions between modules.
+**Adding a new module**: create files in `modules/`, implement `renderUI()` and `loadAndProcess(const std::string& path)`, add it to `App`'s `ActiveModule` enum, sidebar nav (`renderSidebar()`), and content switch (`renderContent()`), then instantiate it in `App::init()`. The sidebar is divided into three color-coded groups (MÓDULO 1: Segmentación y Bordes; MÓDULO 2: Transf. y Mejora de Imagen; MÓDULO 3: Feature Extraction & Detection) — add the nav button in the appropriate group. Wrap the entire `renderUI()` body in `ImGui::PushID("ModuleName")` / `ImGui::PopID()` to avoid widget ID collisions between modules.
 
 **Processing flow**: image load → `loadAndProcess()` → OpenCV processing → `Utils::matToTexture()` / `Utils::updateTexture()` → `ImGui::Image()` for display. Textures are re-uploaded on every parameter change via the `m_needsProcess` flag (set in ImGui callbacks, consumed in `renderUI()` to call `reprocess()`).
 
@@ -97,23 +97,37 @@ Shows processing time (`m_lastProcessMs`) next to each result.
 
 `MorphologyModule` — four morphological operations (enum `MorphOp`): Erosion, Dilation, Opening, Closing; applied with a configurable kernel shape (enum `KernelShape`: Rectangle, Ellipse, Cross), kernel size (odd, 1–21), and iteration count (1–10). Shows processing time alongside the result.
 
-`HOGPedestrianModule` — dos modos de detección de peatones con `cv::HOGDescriptor` + SVM preentrenado (`getDefaultPeopleDetector()`):
+`HOGPedestrianModule` — two pedestrian-detection modes using `cv::HOGDescriptor` + pre-trained SVM (`getDefaultPeopleDetector()`):
 
-**Image Mode** (modo interactivo):
-- Carga una imagen via `FileDialog::openImage()`; detección re-ejecutada en la UI thread con `m_imageNeedsDetect`
-- Muestra original + resultado con bounding boxes verdes; exporta con `ExportUtils::nextExportPath()`
+**Image Mode** (interactive):
+- Loads an image via `FileDialog::openImage()`; detection re-runs on the UI thread via `m_imageNeedsDetect`.
+- Displays original + result with green bounding boxes; exports via `ExportUtils::nextExportPath()`.
 
-**Video Mode** (procesamiento offline):
-- Carga metadatos del video sin reproducirlo (`cv::VideoCapture::get()` solamente)
-- "Start Processing" lanza `std::thread` (worker thread) que procesa frame a frame con su propio `cv::HOGDescriptor` local (no comparte `m_hog` para evitar data races)
-- La UI thread solo muestra barra de progreso y estadísticas leyendo `std::atomic<int> m_processedFrames` / `m_detectedTotal`
-- "Cancel Processing" pone `m_cancelRequested = true`; el worker limpia el archivo parcial al cancelar
-- `pollWorker()` se llama cada render frame: cuando `m_isProcessing` pasa a false, hace `join()` y muestra resultado
-- Salida: AVI con codec MJPG (`VideoWriter::fourcc('M','J','P','G')`) → compatible sin ffmpeg
-- Carpeta de salida seleccionable via `FileDialog::openFolder()` (por defecto `exports/`)
-- Nombre del archivo: `{stem}_hog_processed.avi`
+**Video Mode** (offline batch):
+- Reads video metadata without decoding frames (`cv::VideoCapture::get()` only).
+- "Start Processing" spawns a `std::thread` that processes frame-by-frame with its own local `cv::HOGDescriptor` (does not share `m_hog` to avoid data races).
+- UI thread reads `std::atomic<int> m_processedFrames` / `m_detectedTotal` for the progress bar.
+- "Cancel Processing" sets `m_cancelRequested = true`; worker deletes the partial output file on cancel.
+- `pollWorker()` is called every render frame; when `m_isProcessing` goes false it calls `join()` and shows results.
+- Output: AVI with MJPG codec (`VideoWriter::fourcc('M','J','P','G')`) — no ffmpeg required.
+- Output folder selectable via `FileDialog::openFolder()` (defaults to `exports/`); filename: `{stem}_hog_processed.avi`.
 
-Parámetros compartidos por ambos modos: Hit Threshold, Win Stride X/Y, Scale, Group Threshold.
+Shared parameters (both modes): Hit Threshold, Win Stride X/Y, Scale, Group Threshold.
+
+`ORBRecognitionModule` — object recognition using ORB (FAST + BRIEF) + BFMatcher with NORM_HAMMING. Same load/detect/match/buildVisuals pattern as SIFT. Key differences: `cv::ORB::create(nFeatures, scaleFactor, nLevels)`, crossCheck=true matcher (mutual consistency instead of Lowe ratio), hard Hamming distance cap as the "Match Threshold" slider (0–256 bits). Keypoints displayed in orange/yellow to visually distinguish from SIFT. Academic text documents the speed vs precision tradeoff vs SIFT (binary descriptors vs 128-float descriptors).
+
+`LBPFaceRecognitionModule` — face recognition using Local Binary Patterns (no opencv_contrib required). Workflow: Haar cascade face detection (`cv::CascadeClassifier`) → crop largest face → resize to 128×128 → circular LBP(R,P) with bilinear interpolation → LBPH (NxN grid × numBins histogram) → chi-square distance comparison. Constructor auto-loads cascade from Homebrew path (`/opt/homebrew/share/opencv4/haarcascades/haarcascade_frontalface_default.xml`); falls back to a "Browse Cascade" button if not found. Parameters: gridN (2–16), radius (1–3), neighbors (4→16 bins or 8→256 bins), Haar detection scale and minNeighbors, and a configurable same-person threshold. Displays annotated original (face rectangle) and LBP texture (256×256 with green grid overlay) side-by-side for both slots. Comparison verdict based on normalized chi-square distance (per-cell average) vs threshold. Exports both annotated original and LBP texture image.
+
+`SIFTRecognitionModule` — object recognition using classical SIFT + BFMatcher. Belongs to MÓDULO 3.
+
+- Loads a **reference image** and a **comparison image** independently; auto-detects SIFT keypoints on load.
+- `detectFeatures()` runs `cv::SIFT::create()` on both images (grayscale) and stores 128-dim descriptors.
+- `matchFeatures()` runs `cv::BFMatcher` (NORM_L2) with `knnMatch(k=2)` then applies the **Lowe ratio test** (`m[0].distance < ratio * m[1].distance`).
+- Recognition verdict: ≥ 10 good matches → object recognized (standard literature threshold).
+- `buildVisuals()` draws keypoints with `DRAW_RICH_KEYPOINTS` (scale + orientation circles) on scaled copies (max 900 px), and draws the best 100 matches sorted by distance on 700 px-per-side thumbnails.
+- Parameters: nFeatures, contrastThreshold, edgeThreshold (all forwarded to `cv::SIFT::create()`), and Lowe ratio threshold. Parameter changes set `m_needsProcess = true` for auto-reprocess.
+- Exports: matches strip, ref keypoints image, query keypoints image — all via `ExportUtils::nextExportPath()`.
+- Uses the standard module patterns: `m_needsProcess` flag, `m_exportMsg` / `m_exportMsgTime` for timed feedback, raw images never modified after load, `Utils::updateTexture()` for all GPU uploads.
 
 ## Key Dependencies
 

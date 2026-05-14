@@ -15,6 +15,9 @@
 #include "modules/NoiseReductionModule.h"
 #include "modules/MorphologyModule.h"
 #include "modules/HOGPedestrianModule.h"
+#include "modules/SIFTRecognitionModule.h"
+#include "modules/ORBRecognitionModule.h"
+#include "modules/LBPFaceRecognitionModule.h"
 
 #include <cstdio>
 
@@ -110,6 +113,9 @@ bool App::init()
     m_noiseModule      = std::make_unique<NoiseReductionModule>();
     m_morphologyModule = std::make_unique<MorphologyModule>();
     m_hogModule        = std::make_unique<HOGPedestrianModule>();
+    m_siftModule       = std::make_unique<SIFTRecognitionModule>();
+    m_orbModule        = std::make_unique<ORBRecognitionModule>();
+    m_lbpModule        = std::make_unique<LBPFaceRecognitionModule>();
 
     return true;
 }
@@ -225,10 +231,13 @@ void App::renderSidebar()
     navButton("Noise Reduction & Filters",  ActiveModule::NoiseReduction);
     navButton("Morphological Operations",  ActiveModule::Morphology);
 
-    // ── MÓDULO 3 — Feature Extraction & Detection ────────────────────────────
-    sectionHeader("MÓDULO 3", "Feature Extraction & Detection",
+    // ── MÓDULO 3 — Feature Extraction & Recognition ──────────────────────────
+    sectionHeader("MÓDULO 3", "Feature Extraction",
                   ImVec4(0.35f, 1.00f, 0.75f, 1.0f));
     navButton("HoG Pedestrian Detection", ActiveModule::HOGPedestrian);
+    navButton("SIFT Object Recognition",  ActiveModule::SIFTRecognition);
+    navButton("ORB Object Recognition",   ActiveModule::ORBRecognition);
+    navButton("LBP Face Recognition",     ActiveModule::LBPFaceRecognition);
 
     // ── Pie de versión ────────────────────────────────────────────────────────
     ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 24.0f);
@@ -277,6 +286,18 @@ void App::renderContent()
 
     case ActiveModule::HOGPedestrian:
         m_hogModule->renderUI();
+        break;
+
+    case ActiveModule::SIFTRecognition:
+        m_siftModule->renderUI();
+        break;
+
+    case ActiveModule::ORBRecognition:
+        m_orbModule->renderUI();
+        break;
+
+    case ActiveModule::LBPFaceRecognition:
+        m_lbpModule->renderUI();
         break;
     }
 }

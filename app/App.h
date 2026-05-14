@@ -13,8 +13,11 @@ class HistogramEqualizationModule;
 class NoiseReductionModule;
 class MorphologyModule;
 class HOGPedestrianModule;
+class SIFTRecognitionModule;
+class ORBRecognitionModule;
+class LBPFaceRecognitionModule;
 
-enum class ActiveModule { None, Threshold, EdgeDetection, DocumentCleanup, Transform, HistogramEq, NoiseReduction, Morphology, HOGPedestrian };
+enum class ActiveModule { None, Threshold, EdgeDetection, DocumentCleanup, Transform, HistogramEq, NoiseReduction, Morphology, HOGPedestrian, SIFTRecognition, ORBRecognition, LBPFaceRecognition };
 
 class App
 {
@@ -45,4 +48,7 @@ private:
     std::unique_ptr<NoiseReductionModule>        m_noiseModule;
     std::unique_ptr<MorphologyModule>            m_morphologyModule;
     std::unique_ptr<HOGPedestrianModule>         m_hogModule;
+    std::unique_ptr<SIFTRecognitionModule>       m_siftModule;
+    std::unique_ptr<ORBRecognitionModule>        m_orbModule;
+    std::unique_ptr<LBPFaceRecognitionModule>    m_lbpModule;
 };
