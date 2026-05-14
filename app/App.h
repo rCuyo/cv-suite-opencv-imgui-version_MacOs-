@@ -12,8 +12,9 @@ class TransformModule;
 class HistogramEqualizationModule;
 class NoiseReductionModule;
 class MorphologyModule;
+class HOGPedestrianModule;
 
-enum class ActiveModule { None, Threshold, EdgeDetection, DocumentCleanup, Transform, HistogramEq, NoiseReduction, Morphology };
+enum class ActiveModule { None, Threshold, EdgeDetection, DocumentCleanup, Transform, HistogramEq, NoiseReduction, Morphology, HOGPedestrian };
 
 class App
 {
@@ -43,4 +44,5 @@ private:
     std::unique_ptr<HistogramEqualizationModule> m_histEqModule;
     std::unique_ptr<NoiseReductionModule>        m_noiseModule;
     std::unique_ptr<MorphologyModule>            m_morphologyModule;
+    std::unique_ptr<HOGPedestrianModule>         m_hogModule;
 };

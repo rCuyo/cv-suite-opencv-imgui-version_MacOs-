@@ -71,6 +71,7 @@ set(APP_SOURCES
     modules/HistogramEqualizationModule.cpp
     modules/NoiseReductionModule.cpp
     modules/MorphologyModule.cpp
+    modules/HOGPedestrianModule.cpp
     ${tinyfiledialogs_SOURCE_DIR}/tinyfiledialogs.c
 )
 

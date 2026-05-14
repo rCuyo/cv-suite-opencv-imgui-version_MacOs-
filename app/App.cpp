@@ -14,6 +14,7 @@
 #include "modules/HistogramEqualizationModule.h"
 #include "modules/NoiseReductionModule.h"
 #include "modules/MorphologyModule.h"
+#include "modules/HOGPedestrianModule.h"
 
 #include <cstdio>
 
@@ -108,6 +109,7 @@ bool App::init()
     m_histEqModule     = std::make_unique<HistogramEqualizationModule>();
     m_noiseModule      = std::make_unique<NoiseReductionModule>();
     m_morphologyModule = std::make_unique<MorphologyModule>();
+    m_hogModule        = std::make_unique<HOGPedestrianModule>();
 
     return true;
 }
@@ -223,6 +225,11 @@ void App::renderSidebar()
     navButton("Noise Reduction & Filters",  ActiveModule::NoiseReduction);
     navButton("Morphological Operations",  ActiveModule::Morphology);
 
+    // ── MÓDULO 3 — Feature Extraction & Detection ────────────────────────────
+    sectionHeader("MÓDULO 3", "Feature Extraction & Detection",
+                  ImVec4(0.35f, 1.00f, 0.75f, 1.0f));
+    navButton("HoG Pedestrian Detection", ActiveModule::HOGPedestrian);
+
     // ── Pie de versión ────────────────────────────────────────────────────────
     ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 24.0f);
     ImGui::Separator();
@@ -266,6 +273,10 @@ void App::renderContent()
 
     case ActiveModule::Morphology:
         m_morphologyModule->renderUI();
+        break;
+
+    case ActiveModule::HOGPedestrian:
+        m_hogModule->renderUI();
         break;
     }
 }
